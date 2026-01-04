@@ -1,0 +1,31 @@
+{
+  "name": "reveal-pro-backend",
+  "version": "1.0.0",
+  "description": "Reveal Pro - Link tracking API",
+  "main": "api-backend.js",
+  "scripts": {
+    "start": "node api-backend.js",
+    "dev": "nodemon api-backend.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "@supabase/supabase-js": "^2.39.0",
+    "useragent": "^2.3.0",
+    "geoip-lite": "^1.4.7",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "tracking",
+    "analytics",
+    "link-tracking"
+  ],
+  "author": "",
+  "license": "MIT"
+}
