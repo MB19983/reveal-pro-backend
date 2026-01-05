@@ -8,6 +8,7 @@ const { createClient } = require('@supabase/supabase-js');
 const useragent = require('useragent');
 const geoip = require('geoip-lite');
 const { Resend } = require('resend');
+const twilio = require('twilio');
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,11 @@ app.use(express.json());
 
 // Resend setup for email alerts
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Twilio setup for WhatsApp alerts
+const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN 
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
 
 // Supabase setup (use free tier)
 const supabase = createClient(
@@ -125,6 +131,44 @@ function calculateIntentScore(clicks) {
   if (uniqueDevices > 1) score += 20;
   
   return Math.min(score, 100);
+}
+
+// Utility: Send WhatsApp alert
+async function sendWhatsAppAlert(prospectName, linkName, intentScore, clicks) {
+  // Skip if Twilio not configured
+  if (!twilioClient || !process.env.WHATSAPP_TO) {
+    console.log('⚠️ WhatsApp non configuré (Twilio credentials manquants)');
+    return false;
+  }
+  
+  try {
+    const message = `🔥 *PROSPECT CHAUD !*
+
+👤 *${prospectName.replace(/_/g, ' ')}*
+📄 ${linkName}
+
+📊 *Statistiques :*
+• ${clicks} visites
+• Score d'intention : ${intentScore}%
+
+⚡ *Action recommandée :*
+Relancer MAINTENANT pendant que l'intérêt est au maximum !
+
+---
+Reveal Pro`;
+
+    await twilioClient.messages.create({
+      body: message,
+      from: process.env.TWILIO_WHATSAPP_FROM,
+      to: process.env.WHATSAPP_TO
+    });
+    
+    console.log('✅ WhatsApp envoyé !');
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur WhatsApp:', error.message);
+    return false;
+  }
 }
 
 // ENDPOINT: Create a new trackable link
@@ -726,12 +770,24 @@ app.get('/api/test-alert/:linkId', async (req, res) => {
       `
     });
     
+    // Send WhatsApp alert if prospect identified and hot
+    let whatsappSent = false;
+    if (latestClick.prospect_name && intentScore >= 70) {
+      whatsappSent = await sendWhatsAppAlert(
+        latestClick.prospect_name,
+        link.name,
+        intentScore,
+        clicks.length
+      );
+    }
+    
     res.json({ 
       success: true, 
       message: `Email envoyé à ${testEmail}`,
       intentScore: intentScore,
       clicks: clicks.length,
-      emailId: emailResult.id
+      emailId: emailResult.id,
+      whatsappSent: whatsappSent
     });
     
   } catch (error) {
@@ -746,41 +802,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-
-```javascript
-const twilio = require('twilio');
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-async function sendWhatsAppAlert(prospectName, linkName, intentScore, clicks) {
-  try {
-    const message = `🔥 *PROSPECT CHAUD !*
-
-👤 *${prospectName.replace(/_/g, ' ')}*
-📄 ${linkName}
-
-📊 *Statistiques :*
-• ${clicks} visites
-• Score d'intention : ${intentScore}%
-
-⚡ *Action recommandée :*
-Relancer MAINTENANT pendant que l'intérêt est au maximum !
-
----
-Reveal Pro`;
-
-    await twilioClient.messages.create({
-      body: message,
-      from: process.env.TWILIO_WHATSAPP_FROM,
-      to: process.env.WHATSAPP_TO
-    });
-    
-    console.log('✅ WhatsApp envoyé !');
-    return true;
-  } catch (error) {
-    console.error('❌ Erreur WhatsApp:', error);
-    return false;
-  }
-}
