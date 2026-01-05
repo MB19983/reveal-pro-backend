@@ -1098,10 +1098,10 @@
             const resultDiv = document.getElementById('createResult');
             
             btn.disabled = true;
-            btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0;"></div> Création...';
+            btn.innerHTML = 'Creation en cours...';
             
             try {
-                const response = await fetch(`${API_URL}/api/links/create`, {
+                const response = await fetch(API_URL + '/api/links/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1115,28 +1115,25 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    // URL is already complete with encoded prospect name
                     const fullUrl = data.link.trackableUrl;
                     
-                    resultDiv.innerHTML = `
-                        <div class="card">
-                            <div class="success-box">
-                                <div class="success-title">Lien cree !</div>
-                                <div class="prospect-badge">
-                                    <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.25rem;">LIEN POUR</div>
-                                    <div class="prospect-name">${prospect}</div>
-                                </div>
-                                <div class="link-box">${fullUrl}</div>
-                                <button class="btn btn-secondary" onclick="copyLink('${fullUrl}')">Copier le lien</button>
-                            </div>
-                            <div class="info-box" style="margin-top: 1rem;">
-                                <div class="info-box-title">Prochaine etape</div>
-                                <p>Envoyez ce lien a <strong>${prospect}</strong> par email ou SMS. Vous recevrez une alerte des qu'il sera interesse !</p>
-                            </div>
-                        </div>
-                    `;
+                    resultDiv.innerHTML = 
+                        '<div class="card">' +
+                            '<div class="success-box">' +
+                                '<div class="success-title">Lien cree avec succes !</div>' +
+                                '<div class="prospect-badge">' +
+                                    '<div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 0.25rem;">LIEN POUR</div>' +
+                                    '<div class="prospect-name">' + prospect + '</div>' +
+                                '</div>' +
+                                '<div class="link-box">' + fullUrl + '</div>' +
+                                '<button class="btn btn-secondary" onclick="copyLink(\'' + fullUrl + '\')">Copier le lien</button>' +
+                            '</div>' +
+                            '<div class="info-box" style="margin-top: 1rem;">' +
+                                '<div class="info-box-title">Prochaine etape</div>' +
+                                '<p>Envoyez ce lien par email ou SMS. Vous recevrez une alerte quand le prospect sera interesse !</p>' +
+                            '</div>' +
+                        '</div>';
                     
-                    // Reset form
                     document.getElementById('linkName').value = '';
                     document.getElementById('originalUrl').value = '';
                     document.getElementById('prospectName').value = '';
@@ -1147,12 +1144,11 @@
                     throw new Error(data.error || 'Erreur');
                 }
             } catch (error) {
-                resultDiv.innerHTML = `
-                    <div class="card" style="background: #fef2f2; border: 1px solid #fecaca;">
-                        <strong style="color: #dc2626;">Erreur</strong>
-                        <p style="color: #991b1b; margin-top: 0.5rem;">${error.message}</p>
-                    </div>
-                `;
+                resultDiv.innerHTML = 
+                    '<div class="card" style="background: #fef2f2; border: 1px solid #fecaca;">' +
+                        '<strong style="color: #dc2626;">Erreur</strong>' +
+                        '<p style="color: #991b1b; margin-top: 0.5rem;">' + error.message + '</p>' +
+                    '</div>';
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = 'Creer le lien';
