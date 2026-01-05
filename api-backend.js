@@ -173,6 +173,7 @@ app.post('/api/links/create', async (req, res) => {
 app.get('/:shortCode', async (req, res) => {
   try {
     const { shortCode } = req.params;
+    const prospectName = req.query.p || null; // Capture ?p=Jean_Dupont parameter
     
     // Get link info
     const { data: link, error: linkError } = await supabase
@@ -224,6 +225,7 @@ app.get('/:shortCode', async (req, res) => {
         user_agent: userAgent,
         session_id: sessionId,
         visit_number: visitNumber,
+        prospect_name: prospectName, // Store prospect name from ?p= parameter
         duration: 0 // Will be updated on page unload
       });
     
@@ -638,6 +640,12 @@ app.get('/api/test-alert/:linkId', async (req, res) => {
             
             <div class="content">
               <div class="property-name">${link.name}</div>
+              ${latestClick.prospect_name ? `
+              <div style="background: #2D5016; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
+                <div style="font-size: 12px; opacity: 0.8; margin-bottom: 5px;">PROSPECT IDENTIFIÉ</div>
+                <div style="font-size: 22px; font-weight: bold;">👤 ${latestClick.prospect_name.replace(/_/g, ' ')}</div>
+              </div>
+              ` : ''}
               
               <div class="stats-grid">
                 <div class="stat">
