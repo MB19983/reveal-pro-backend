@@ -8,6 +8,7 @@ const { createClient } = require('@supabase/supabase-js');
 const useragent = require('useragent');
 const geoip = require('geoip-lite');
 const { Resend } = require('resend');
+const twilio = require('twilio');
 
 const app = express();
 app.use(cors());
@@ -15,6 +16,11 @@ app.use(express.json());
 
 // Resend setup for email alerts
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Twilio setup for WhatsApp alerts
+const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN 
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
 
 // Supabase setup (use free tier)
 const supabase = createClient(
@@ -127,6 +133,81 @@ function calculateIntentScore(clicks) {
   return Math.min(score, 100);
 }
 
+// Utility: Send WhatsApp alert
+async function sendWhatsAppAlert(prospectName, linkName, intentScore, clicks) {
+  // Skip if Twilio not configured
+  if (!twilioClient || !process.env.WHATSAPP_TO) {
+    console.log('WhatsApp non configure');
+    return false;
+  }
+  
+  try {
+    const prospectClean = prospectName.replace(/_/g, ' ');
+    const message = 'PROSPECT CHAUD!\n\n' +
+      'Prospect: ' + prospectClean + '\n' +
+      'Dossier: ' + linkName + '\n\n' +
+      'Statistiques:\n' +
+      '- ' + clicks + ' visites\n' +
+      '- Score: ' + intentScore + '%\n\n' +
+      'Action: Relancer MAINTENANT!\n\n' +
+      '-- Reveal Pro';
+
+    await twilioClient.messages.create({
+      body: message,
+      from: process.env.TWILIO_WHATSAPP_FROM,
+      to: process.env.WHATSAPP_TO
+    });
+    
+    console.log('WhatsApp envoye!');
+    return true;
+  } catch (error) {
+    console.error('Erreur WhatsApp:', error.message);
+    return false;
+  }
+}
+
+// ENDPOINT: Create a new user
+app.post('/api/users/create', async (req, res) => {
+  try {
+    const { email, name, whatsapp } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    // Check if user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+    
+    if (existingUser) {
+      return res.json({ success: true, user: existingUser, message: 'User already exists' });
+    }
+    
+    // Create new user
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        email: email,
+        name: name || email.split('@')[0],
+        plan: 'free',
+        whatsapp: whatsapp || null
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    res.json({ success: true, user: data });
+    
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
 // ENDPOINT: Create a new trackable link
 app.post('/api/links/create', async (req, res) => {
   try {
@@ -230,6 +311,109 @@ app.get('/:shortCode', async (req, res) => {
       });
     
     if (clickError) throw clickError;
+    
+    // AUTO-ALERT: Check if prospect is HOT and send alerts (async, non-blocking)
+    (async () => {
+      try {
+        // Get all clicks for this link
+        const { data: allClicks } = await supabase
+          .from('clicks')
+          .select('*')
+          .eq('link_id', link.id)
+          .order('timestamp', { ascending: false });
+        
+        const intentScore = calculateIntentScore(allClicks);
+        
+        // Only alert if score >= 70 AND prospect has a name
+        if (intentScore >= 70 && prospectName) {
+          // Check if we already sent an alert recently (last 24h)
+          const { data: recentAlerts } = await supabase
+            .from('alerts_sent')
+            .select('*')
+            .eq('link_id', link.id)
+            .gte('sent_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+          
+          if (!recentAlerts || recentAlerts.length === 0) {
+            console.log('HOT PROSPECT: ' + prospectName + ' - Score: ' + intentScore + '%');
+            
+            // Get user email
+            const { data: user } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', link.user_id)
+              .single();
+            
+            const userEmail = user?.email || 'matthieubaloche@hotmail.fr';
+            const latestClick = allClicks[0];
+            
+            // Send WhatsApp
+            if (prospectName) {
+              await sendWhatsAppAlert(prospectName, link.name, intentScore, allClicks.length);
+            }
+            
+            // Send Email
+            try {
+              await resend.emails.send({
+                from: 'Reveal Pro <onboarding@resend.dev>',
+                to: userEmail,
+                subject: `🔥 PROSPECT CHAUD : ${link.name} - ${prospectName.replace(/_/g, ' ')}`,
+                html: `
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; background: #f5f5f5; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #0A0A0A 0%, #1a1a1a 100%); color: white; padding: 30px; text-align: center; border-radius: 16px 16px 0 0;">
+                      <h1 style="margin: 0; font-size: 24px;">🔥 Prospect Chaud Détecté !</h1>
+                    </div>
+                    <div style="background: white; padding: 30px; border-radius: 0 0 16px 16px;">
+                      <div style="background: #2D5016; color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 25px;">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 5px;">PROSPECT IDENTIFIÉ</div>
+                        <div style="font-size: 28px; font-weight: bold;">👤 ${prospectName.replace(/_/g, ' ')}</div>
+                      </div>
+                      <h2 style="margin: 0 0 20px; color: #333;">${link.name}</h2>
+                      <div style="display: flex; justify-content: space-around; text-align: center; margin: 25px 0; background: #f9f9f9; padding: 20px; border-radius: 12px;">
+                        <div>
+                          <div style="font-size: 32px; font-weight: bold; color: #2D5016;">${allClicks.length}</div>
+                          <div style="color: #666; font-size: 14px;">Visites</div>
+                        </div>
+                        <div>
+                          <div style="font-size: 32px; font-weight: bold; color: #2D5016;">${intentScore}%</div>
+                          <div style="color: #666; font-size: 14px;">Score</div>
+                        </div>
+                      </div>
+                      <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px 20px; margin: 20px 0; border-radius: 8px;">
+                        <strong style="color: #dc2626; font-size: 16px;">⚡ RECOMMANDATION</strong>
+                        <p style="margin: 10px 0 0; color: #7f1d1d;">Relancez MAINTENANT pendant que l'intérêt est au maximum !</p>
+                      </div>
+                      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 14px; color: #666;">
+                        <strong style="color: #333;">Dernier clic :</strong><br>
+                        📍 ${latestClick?.city || 'Inconnu'}, ${latestClick?.country || 'Inconnu'}<br>
+                        📱 ${latestClick?.device_type || 'Inconnu'} - ${latestClick?.browser || 'Inconnu'}<br>
+                        🕐 ${new Date().toLocaleString('fr-FR')}
+                      </div>
+                    </div>
+                    <p style="text-align: center; color: #999; font-size: 12px; margin-top: 20px;">
+                      Envoyé par Reveal Pro
+                    </p>
+                  </div>
+                `
+              });
+              console.log('Auto-alert email sent');
+            } catch (emailError) {
+              console.error('Email error:', emailError);
+            }
+            
+            // Record alert sent
+            await supabase
+              .from('alerts_sent')
+              .insert({
+                user_id: link.user_id,
+                link_id: link.id,
+                intent_score: intentScore
+              });
+          }
+        }
+      } catch (alertError) {
+        console.error('Auto-alert error:', alertError);
+      }
+    })();
     
     // Serve tracking page that redirects and tracks duration
     const trackingHtml = `
@@ -726,12 +910,24 @@ app.get('/api/test-alert/:linkId', async (req, res) => {
       `
     });
     
+    // Send WhatsApp alert if prospect identified and hot
+    let whatsappSent = false;
+    if (latestClick.prospect_name && intentScore >= 70) {
+      whatsappSent = await sendWhatsAppAlert(
+        latestClick.prospect_name,
+        link.name,
+        intentScore,
+        clicks.length
+      );
+    }
+    
     res.json({ 
       success: true, 
       message: `Email envoyé à ${testEmail}`,
       intentScore: intentScore,
       clicks: clicks.length,
-      emailId: emailResult.id
+      emailId: emailResult.id,
+      whatsappSent: whatsappSent
     });
     
   } catch (error) {
@@ -746,41 +942,3 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-
-```javascript
-const twilio = require('twilio');
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-async function sendWhatsAppAlert(prospectName, linkName, intentScore, clicks) {
-  try {
-    const message = `🔥 *PROSPECT CHAUD !*
-
-👤 *${prospectName.replace(/_/g, ' ')}*
-📄 ${linkName}
-
-📊 *Statistiques :*
-• ${clicks} visites
-• Score d'intention : ${intentScore}%
-
-⚡ *Action recommandée :*
-Relancer MAINTENANT pendant que l'intérêt est au maximum !
-
----
-Reveal Pro`;
-
-    await twilioClient.messages.create({
-      body: message,
-      from: process.env.TWILIO_WHATSAPP_FROM,
-      to: process.env.WHATSAPP_TO
-    });
-    
-    console.log('✅ WhatsApp envoyé !');
-    return true;
-  } catch (error) {
-    console.error('❌ Erreur WhatsApp:', error);
-    return false;
-  }
-}
