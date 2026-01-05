@@ -17,7 +17,8 @@
     "useragent": "^2.3.0",
     "geoip-lite": "^1.4.7",
     "dotenv": "^16.3.1",
-    "resend": "^3.0.0"
+    "resend": "^3.0.0",
+    "twilio": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
