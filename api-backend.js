@@ -133,7 +133,17 @@ function calculateIntentScore(clicks, threshold = 5) {
 
 // Send WhatsApp alert
 async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp) {
-  if (!twilioClient || !userWhatsapp) return false;
+  console.log('WhatsApp function called - Number:', userWhatsapp);
+  
+  if (!twilioClient) {
+    console.log('WhatsApp: Twilio not configured');
+    return false;
+  }
+  
+  if (!userWhatsapp) {
+    console.log('WhatsApp: No number provided');
+    return false;
+  }
   
   try {
     const message = 'ALERTE NOLY\n\n' +
@@ -148,13 +158,15 @@ async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp
       whatsappNumber = 'whatsapp:' + whatsappNumber;
     }
 
+    console.log('WhatsApp: Sending to', whatsappNumber);
+
     await twilioClient.messages.create({
       body: message,
       from: process.env.TWILIO_WHATSAPP_FROM,
       to: whatsappNumber
     });
     
-    console.log('WhatsApp sent');
+    console.log('WhatsApp: Sent successfully');
     return true;
   } catch (error) {
     console.error('WhatsApp error:', error.message);
@@ -767,12 +779,17 @@ app.get('/d/:shortCode', async (req, res) => {
               if (user) {
                 const humanClicks = allClicks.filter(c => !c.is_bot);
                 
+                console.log('User email:', user.email);
+                console.log('User whatsapp:', user.whatsapp);
+                
                 if (user.email) {
                   await sendEmailAlert(link.name, intentScore, humanClicks.length, humanClicks[0], user.email);
                 }
                 
                 if (user.whatsapp) {
                   await sendWhatsAppAlert(link.name, intentScore, humanClicks.length, user.whatsapp);
+                } else {
+                  console.log('No WhatsApp configured for user');
                 }
                 
                 await supabase.from('alerts_sent').insert({

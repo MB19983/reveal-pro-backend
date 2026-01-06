@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Noly - Smart Link Tracking</title>
+    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a2e;
+            --bg-hover: #252540;
+            --accent: #667eea;
+            --accent-light: #7c8ff8;
+            --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #666680;
+            --border: #2a2a40;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #ef4444;
+            --hot: #ff6b6b;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        
+        /* Auth Screens */
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: var(--bg-primary);
+        }
+        
+        .auth-box {
+            width: 100%;
+            max-width: 400px;
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 2.5rem;
+            border: 1px solid var(--border);
+        }
+        
+        .auth-logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .auth-logo h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .auth-logo p {
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+        
+        .auth-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 0.875rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+        
+        .btn-small {
+            width: auto;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .auth-switch {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: var(--text-secondary);
+        }
+        
+        .auth-switch a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        /* App Layout */
+        .app {
+            display: none;
+            min-height: 100vh;
+        }
+        
+        .app.active {
+            display: block;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 260px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+        }
+        
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        
+        .sidebar-logo {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2rem;
+        }
+        
+        .sidebar-nav {
+            flex: 1;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .nav-item.active {
+            background: var(--accent-gradient);
+            color: white;
+        }
+        
+        .nav-icon {
+            font-size: 1.25rem;
+        }
+        
+        .sidebar-user {
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        
+        .user-info:hover {
+            background: var(--bg-hover);
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            background: var(--accent-gradient);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+        
+        .user-name {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .user-email {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        /* Main Content */
+        .main {
+            margin-left: 0;
+            min-height: 100vh;
+            transition: margin-left 0.3s;
+        }
+        
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .menu-btn {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+        
+        .header-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .content {
+            padding: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .card-body {
+            padding: 1.25rem;
+        }
+        
+        /* Link Items */
+        .link-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .link-item:last-child {
+            border-bottom: none;
+        }
+        
+        .link-item:hover {
+            background: var(--bg-hover);
+        }
+        
+        .link-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .link-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .link-stats {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        .link-score {
+            padding: 0.4rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .score-hot {
+            background: rgba(255, 107, 107, 0.2);
+            color: var(--hot);
+        }
+        
+        .score-warm {
+            background: rgba(251, 191, 36, 0.2);
+            color: var(--warning);
+        }
+        
+        .score-cold {
+            background: rgba(102, 126, 234, 0.2);
+            color: var(--accent);
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+        
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        .modal {
+            background: var(--bg-card);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+        
+        .modal-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .modal-body {
+            padding: 1.25rem;
+        }
+        
+        /* Analytics Detail */
+        .analytics-header {
+            background: var(--accent-gradient);
+            padding: 1.5rem;
+            border-radius: 16px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .analytics-score {
+            font-size: 3rem;
+            font-weight: 700;
+        }
+        
+        .analytics-label {
+            opacity: 0.9;
+        }
+        
+        .visitor-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .visitor-info {
+            flex: 1;
+        }
+        
+        .visitor-location {
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .visitor-details {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .visitor-stats {
+            text-align: right;
+        }
+        
+        .visitor-visits {
+            font-weight: 600;
+            color: var(--accent);
+        }
+        
+        .visitor-duration {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            animation: toastIn 0.3s ease;
+        }
+        
+        @keyframes toastIn {
+            from { transform: translateX(-50%) translateY(50px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        
+        /* WhatsApp Button */
+        .whatsapp-box {
+            background: #25D366;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .whatsapp-box p {
+            color: white;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+        
+        .whatsapp-btn {
+            display: block;
+            background: white;
+            color: #25D366;
+            text-align: center;
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        /* Responsive */
+        @media (min-width: 768px) {
+            .sidebar {
+                transform: translateX(0);
+            }
+            
+            .main {
+                margin-left: 260px;
+            }
+            
+            .menu-btn {
+                display: none;
+            }
+        }
+        
+        /* Overlay for mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 99;
+        }
+        
+        .sidebar-overlay.active {
+            display: block;
+        }
+        
+        /* Section visibility */
+        .section {
+            display: none;
+        }
+        
+        .section.active {
+            display: block;
+        }
+        
+        /* Threshold selector */
+        .threshold-selector {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+        
+        .threshold-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .threshold-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        
+        .threshold-btn:hover:not(.active) {
+            border-color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <!-- Auth: Login -->
+    <div id="authLogin" class="auth-container">
+        <div class="auth-box">
+            <div class="auth-logo">
+                <h1>Noly</h1>
+                <p>Smart Link Tracking</p>
+            </div>
+            <h2 class="auth-title">Connexion</h2>
+            <form onsubmit="login(event)">
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="loginEmail" placeholder="vous@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mot de passe</label>
+                    <input type="password" class="form-input" id="loginPassword" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn btn-primary" id="loginBtn">Se connecter</button>
+            </form>
+            <p class="auth-switch">
+                Pas encore de compte ? <a href="#" onclick="showRegister()">S'inscrire</a>
+            </p>
+        </div>
+    </div>
+    
+    <!-- Auth: Register -->
+    <div id="authRegister" class="auth-container" style="display: none;">
+        <div class="auth-box">
+            <div class="auth-logo">
+                <h1>Noly</h1>
+                <p>Smart Link Tracking</p>
+            </div>
+            <h2 class="auth-title">Inscription</h2>
+            <form onsubmit="register(event)">
+                <div class="form-group">
+                    <label class="form-label">Nom</label>
+                    <input type="text" class="form-input" id="registerName" placeholder="Votre nom">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="registerEmail" placeholder="vous@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mot de passe</label>
+                    <input type="password" class="form-input" id="registerPassword" placeholder="••••••••" required minlength="6">
+                </div>
+                <button type="submit" class="btn btn-primary" id="registerBtn">Creer mon compte</button>
+            </form>
+            <p class="auth-switch">
+                Deja un compte ? <a href="#" onclick="showLogin()">Se connecter</a>
+            </p>
+        </div>
+    </div>
+    
+    <!-- Main App -->
+    <div id="app" class="app">
+        <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+        
+        <aside class="sidebar">
+            <div class="sidebar-logo">Noly</div>
+            <nav class="sidebar-nav">
+                <div class="nav-item active" onclick="showSection('dashboard', this)">
+                    <span class="nav-icon">📊</span>
+                    <span>Dashboard</span>
+                </div>
+                <div class="nav-item" onclick="showSection('create', this)">
+                    <span class="nav-icon">➕</span>
+                    <span>Nouveau lien</span>
+                </div>
+                <div class="nav-item" onclick="showSection('links', this)">
+                    <span class="nav-icon">🔗</span>
+                    <span>Mes liens</span>
+                </div>
+                <div class="nav-item" onclick="showSection('hot', this)">
+                    <span class="nav-icon">🔥</span>
+                    <span>Liens chauds</span>
+                </div>
+                <div class="nav-item" onclick="showSection('settings', this)">
+                    <span class="nav-icon">⚙️</span>
+                    <span>Parametres</span>
+                </div>
+            </nav>
+            <div class="sidebar-user">
+                <div class="user-info" onclick="logout()">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div>
+                        <div class="user-name" id="userName">Utilisateur</div>
+                        <div class="user-email" id="userEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5d282e382f1d38303c3431733e3230">[email&#160;protected]</a></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        
+        <main class="main">
+            <header class="header">
+                <div class="header-left">
+                    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+                    <h1 class="header-title" id="pageTitle">Dashboard</h1>
+                </div>
+            </header>
+            
+            <div class="content">
+                <!-- Dashboard Section -->
+                <div id="dashboard" class="section active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="statLinks">0</div>
+                            <div class="stat-label">Liens actifs</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statClicks">0</div>
+                            <div class="stat-label">Clics totaux</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statHot">0</div>
+                            <div class="stat-label">Liens chauds</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Activite recente</span>
+                        </div>
+                        <div id="recentActivity">
+                            <div class="empty-state">
+                                <div class="empty-icon">📊</div>
+                                <p>Aucune activite pour le moment</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Create Link Section -->
+                <div id="create" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Creer un nouveau lien</span>
+                        </div>
+                        <div class="card-body">
+                            <form onsubmit="createLink(event)">
+                                <div class="form-group">
+                                    <label class="form-label">Nom du lien</label>
+                                    <input type="text" class="form-input" id="linkName" placeholder="Ex: Proposition client ABC" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">URL de destination</label>
+                                    <input type="url" class="form-input" id="linkUrl" placeholder="https://..." required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Seuil de notification (clics)</label>
+                                    <div class="threshold-selector">
+                                        <button type="button" class="threshold-btn" onclick="setThreshold(3, this)">3</button>
+                                        <button type="button" class="threshold-btn active" onclick="setThreshold(5, this)">5</button>
+                                        <button type="button" class="threshold-btn" onclick="setThreshold(7, this)">7</button>
+                                        <button type="button" class="threshold-btn" onclick="setThreshold(10, this)">10</button>
+                                    </div>
+                                    <input type="hidden" id="linkThreshold" value="5">
+                                </div>
+                                <button type="submit" class="btn btn-primary" id="createBtn">Creer le lien</button>
+                            </form>
+                            <div id="createResult"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Links Section -->
+                <div id="links" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Mes liens</span>
+                            <button class="btn btn-secondary btn-small" onclick="loadLinks()">Actualiser</button>
+                        </div>
+                        <div id="linksList">
+                            <div class="empty-state">
+                                <div class="empty-icon">🔗</div>
+                                <p>Aucun lien pour le moment</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hot Links Section -->
+                <div id="hot" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Liens chauds</span>
+                            <button class="btn btn-secondary btn-small" onclick="loadHotLinks()">Actualiser</button>
+                        </div>
+                        <div id="hotList">
+                            <div class="empty-state">
+                                <div class="empty-icon">🔥</div>
+                                <p>Aucun lien chaud pour le moment</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Settings Section -->
+                <div id="settings" class="section">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Parametres du compte</span>
+                        </div>
+                        <div class="card-body">
+                            <form onsubmit="saveSettings(event)">
+                                <div class="form-group">
+                                    <label class="form-label">Nom</label>
+                                    <input type="text" class="form-input" id="settingsName" placeholder="Votre nom">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">WhatsApp</label>
+                                    <input type="tel" class="form-input" id="settingsWhatsapp" placeholder="+33 6 12 34 56 78">
+                                </div>
+                                
+                                <div class="whatsapp-box">
+                                    <p>Pour recevoir les alertes WhatsApp, activez le service :</p>
+                                    <a href="https://wa.me/+14155238886?text=join%20author-pleasure" target="_blank" class="whatsapp-btn">
+                                        Activer WhatsApp
+                                    </a>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary">Enregistrer</button>
+                            </form>
+                            
+                            <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                                <button class="btn btn-secondary" onclick="logout()">Se deconnecter</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Link Detail Modal -->
+    <div id="linkModal" class="modal-overlay">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <span class="modal-title" id="modalLinkName">Details du lien</span>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalContent">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+    
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+        const API_URL = 'https://v.noly.pro';
+        let token = localStorage.getItem('noly_token');
+        let user = null;
+        let selectedThreshold = 5;
+        
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            if (token) {
+                checkAuth();
+            }
+        });
+        
+        // Auth functions
+        async function checkAuth() {
+            try {
+                const res = await fetch(API_URL + '/api/auth/me', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    user = data.user;
+                    showApp();
+                } else {
+                    showLogin();
+                }
+            } catch (e) {
+                showLogin();
+            }
+        }
+        
+        function showLogin() {
+            document.getElementById('authLogin').style.display = 'flex';
+            document.getElementById('authRegister').style.display = 'none';
+            document.getElementById('app').classList.remove('active');
+        }
+        
+        function showRegister() {
+            document.getElementById('authLogin').style.display = 'none';
+            document.getElementById('authRegister').style.display = 'flex';
+        }
+        
+        async function login(e) {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = 'Connexion...';
+            
+            try {
+                const res = await fetch(API_URL + '/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: document.getElementById('loginEmail').value,
+                        password: document.getElementById('loginPassword').value
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    token = data.token;
+                    user = data.user;
+                    localStorage.setItem('noly_token', token);
+                    showApp();
+                } else {
+                    showToast(data.error || 'Erreur de connexion');
+                }
+            } catch (e) {
+                showToast('Erreur de connexion');
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Se connecter';
+        }
+        
+        async function register(e) {
+            e.preventDefault();
+            const btn = document.getElementById('registerBtn');
+            btn.disabled = true;
+            btn.textContent = 'Inscription...';
+            
+            try {
+                const res = await fetch(API_URL + '/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: document.getElementById('registerName').value,
+                        email: document.getElementById('registerEmail').value,
+                        password: document.getElementById('registerPassword').value
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    token = data.token;
+                    user = data.user;
+                    localStorage.setItem('noly_token', token);
+                    showApp();
+                    showToast('Compte cree avec succes !');
+                } else {
+                    showToast(data.error || 'Erreur inscription');
+                }
+            } catch (e) {
+                showToast('Erreur inscription');
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Creer mon compte';
+        }
+        
+        function logout() {
+            localStorage.removeItem('noly_token');
+            token = null;
+            user = null;
+            showLogin();
+        }
+        
+        function showApp() {
+            document.getElementById('authLogin').style.display = 'none';
+            document.getElementById('authRegister').style.display = 'none';
+            document.getElementById('app').classList.add('active');
+            
+            // Update user info
+            document.getElementById('userName').textContent = user.name || 'Utilisateur';
+            document.getElementById('userEmail').textContent = user.email;
+            document.getElementById('userAvatar').textContent = (user.name || user.email)[0].toUpperCase();
+            
+            // Load settings
+            document.getElementById('settingsName').value = user.name || '';
+            document.getElementById('settingsWhatsapp').value = user.whatsapp || '';
+            
+            loadDashboard();
+        }
+        
+        // Navigation
+        function showSection(section, element) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            document.getElementById(section).classList.add('active');
+            if (element) element.classList.add('active');
+            
+            const titles = {
+                dashboard: 'Dashboard',
+                create: 'Nouveau lien',
+                links: 'Mes liens',
+                hot: 'Liens chauds',
+                settings: 'Parametres'
+            };
+            document.getElementById('pageTitle').textContent = titles[section] || 'Dashboard';
+            
+            if (section === 'links') loadLinks();
+            if (section === 'hot') loadHotLinks();
+            if (section === 'dashboard') loadDashboard();
+            
+            // Close sidebar on mobile
+            document.querySelector('.sidebar').classList.remove('open');
+            document.querySelector('.sidebar-overlay').classList.remove('active');
+        }
+        
+        function toggleSidebar() {
+            document.querySelector('.sidebar').classList.toggle('open');
+            document.querySelector('.sidebar-overlay').classList.toggle('active');
+        }
+        
+        // Dashboard
+        async function loadDashboard() {
+            try {
+                const res = await fetch(API_URL + '/api/links', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    const links = data.links;
+                    const totalClicks = links.reduce((sum, l) => sum + l.stats.totalClicks, 0);
+                    const hotCount = links.filter(l => l.stats.intentScore >= 70).length;
+                    
+                    document.getElementById('statLinks').textContent = links.length;
+                    document.getElementById('statClicks').textContent = totalClicks;
+                    document.getElementById('statHot').textContent = hotCount;
+                    
+                    // Recent activity
+                    const recentDiv = document.getElementById('recentActivity');
+                    if (links.length > 0) {
+                        const sorted = [...links].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                        recentDiv.innerHTML = sorted.slice(0, 5).map(link => `
+                            <div class="link-item" onclick="showLinkDetail('${link.id}')">
+                                <div class="link-info">
+                                    <div class="link-name">${link.name}</div>
+                                    <div class="link-stats">${link.stats.totalClicks} clics - ${link.stats.uniqueVisitors} visiteurs</div>
+                                </div>
+                                <span class="link-score ${link.stats.intentScore >= 70 ? 'score-hot' : link.stats.intentScore >= 40 ? 'score-warm' : 'score-cold'}">
+                                    ${link.stats.intentScore}%
+                                </span>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        
+        // Create link
+        function setThreshold(value, btn) {
+            selectedThreshold = value;
+            document.getElementById('linkThreshold').value = value;
+            document.querySelectorAll('.threshold-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+        
+        async function createLink(e) {
+            e.preventDefault();
+            const btn = document.getElementById('createBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creation...';
+            
+            try {
+                const res = await fetch(API_URL + '/api/links', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        name: document.getElementById('linkName').value,
+                        originalUrl: document.getElementById('linkUrl').value,
+                        clickThreshold: parseInt(document.getElementById('linkThreshold').value)
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    const resultDiv = document.getElementById('createResult');
+                    resultDiv.innerHTML = `
+                        <div style="background: var(--accent-gradient); padding: 1.5rem; border-radius: 12px; margin-top: 1.5rem; text-align: center;">
+                            <p style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">Lien cree avec succes !</p>
+                            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; word-break: break-all; font-family: monospace; font-size: 0.9rem;">
+                                ${data.link.trackableUrl}
+                            </div>
+                            <button class="btn btn-secondary" onclick="copyLink('${data.link.trackableUrl}')" style="background: white; color: var(--accent);">
+                                Copier le lien
+                            </button>
+                        </div>
+                    `;
+                    
+                    document.getElementById('linkName').value = '';
+                    document.getElementById('linkUrl').value = '';
+                    showToast('Lien cree !');
+                } else {
+                    showToast(data.error || 'Erreur');
+                }
+            } catch (e) {
+                showToast('Erreur creation');
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Creer le lien';
+        }
+        
+        function copyLink(url) {
+            navigator.clipboard.writeText(url);
+            showToast('Lien copie !');
+        }
+        
+        // Load links
+        async function loadLinks() {
+            const listDiv = document.getElementById('linksList');
+            listDiv.innerHTML = '<div class="empty-state"><p>Chargement...</p></div>';
+            
+            try {
+                const res = await fetch(API_URL + '/api/links', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                if (data.success && data.links.length > 0) {
+                    listDiv.innerHTML = data.links.map(link => `
+                        <div class="link-item" onclick="showLinkDetail('${link.id}')">
+                            <div class="link-info">
+                                <div class="link-name">${link.name}</div>
+                                <div class="link-stats">${link.stats.totalClicks} clics - Seuil: ${link.clickThreshold}</div>
+                            </div>
+                            <span class="link-score ${link.stats.intentScore >= 70 ? 'score-hot' : link.stats.intentScore >= 40 ? 'score-warm' : 'score-cold'}">
+                                ${link.stats.intentScore}%
+                            </span>
+                        </div>
+                    `).join('');
+                } else {
+                    listDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">🔗</div><p>Aucun lien</p></div>';
+                }
+            } catch (e) {
+                listDiv.innerHTML = '<div class="empty-state"><p>Erreur de chargement</p></div>';
+            }
+        }
+        
+        // Load hot links
+        async function loadHotLinks() {
+            const listDiv = document.getElementById('hotList');
+            listDiv.innerHTML = '<div class="empty-state"><p>Chargement...</p></div>';
+            
+            try {
+                const res = await fetch(API_URL + '/api/links', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    const hotLinks = data.links.filter(l => l.stats.intentScore >= 70);
+                    
+                    if (hotLinks.length > 0) {
+                        listDiv.innerHTML = hotLinks.map(link => `
+                            <div class="link-item" onclick="showLinkDetail('${link.id}')">
+                                <div class="link-info">
+                                    <div class="link-name">${link.name}</div>
+                                    <div class="link-stats">${link.stats.totalClicks} clics - ${link.stats.uniqueVisitors} visiteurs</div>
+                                </div>
+                                <span class="link-score score-hot">${link.stats.intentScore}%</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        listDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">🔥</div><p>Aucun lien chaud</p></div>';
+                    }
+                }
+            } catch (e) {
+                listDiv.innerHTML = '<div class="empty-state"><p>Erreur</p></div>';
+            }
+        }
+        
+        // Show link detail
+        async function showLinkDetail(linkId) {
+            const modal = document.getElementById('linkModal');
+            const content = document.getElementById('modalContent');
+            
+            modal.classList.add('active');
+            content.innerHTML = '<div class="empty-state"><p>Chargement...</p></div>';
+            
+            try {
+                const res = await fetch(API_URL + '/api/links/' + linkId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    const { link, analytics } = data;
+                    document.getElementById('modalLinkName').textContent = link.name;
+                    
+                    content.innerHTML = `
+                        <div class="analytics-header">
+                            <div class="analytics-score">${analytics.intentScore}%</div>
+                            <div class="analytics-label">Score d'interet</div>
+                        </div>
+                        
+                        <div class="stats-grid" style="margin-bottom: 1rem;">
+                            <div class="stat-card">
+                                <div class="stat-value">${analytics.totalClicks}</div>
+                                <div class="stat-label">Clics</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${analytics.uniqueVisitors}</div>
+                                <div class="stat-label">Visiteurs</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${analytics.avgDuration}s</div>
+                                <div class="stat-label">Duree moy.</div>
+                            </div>
+                        </div>
+                        
+                        ${analytics.botClicks > 0 ? `
+                            <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                🤖 ${analytics.botClicks} clics de bots detectes et exclus
+                            </div>
+                        ` : ''}
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <div style="font-weight: 600; margin-bottom: 0.75rem;">Visiteurs</div>
+                            ${analytics.visitors.length > 0 ? analytics.visitors.slice(0, 10).map(v => `
+                                <div class="visitor-item">
+                                    <div class="visitor-info">
+                                        <div class="visitor-location">${v.city}, ${v.country}</div>
+                                        <div class="visitor-details">${v.device} - ${v.browser}</div>
+                                    </div>
+                                    <div class="visitor-stats">
+                                        <div class="visitor-visits">${v.visitCount} visites</div>
+                                        <div class="visitor-duration">${v.avgDuration}s moy.</div>
+                                    </div>
+                                </div>
+                            `).join('') : '<p style="color: var(--text-secondary);">Aucun visiteur</p>'}
+                        </div>
+                        
+                        <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem;">
+                            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Lien trackable</div>
+                            <div style="font-family: monospace; font-size: 0.85rem; word-break: break-all;">${link.trackableUrl}</div>
+                        </div>
+                        
+                        <button class="btn btn-secondary" onclick="copyLink('${link.trackableUrl}')">Copier le lien</button>
+                    `;
+                }
+            } catch (e) {
+                content.innerHTML = '<div class="empty-state"><p>Erreur</p></div>';
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('linkModal').classList.remove('active');
+        }
+        
+        // Settings
+        async function saveSettings(e) {
+            e.preventDefault();
+            
+            try {
+                const res = await fetch(API_URL + '/api/auth/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        name: document.getElementById('settingsName').value,
+                        whatsapp: document.getElementById('settingsWhatsapp').value
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    user = data.user;
+                    document.getElementById('userName').textContent = user.name || 'Utilisateur';
+                    document.getElementById('userAvatar').textContent = (user.name || user.email)[0].toUpperCase();
+                    showToast('Parametres enregistres !');
+                } else {
+                    showToast(data.error || 'Erreur');
+                }
+            } catch (e) {
+                showToast('Erreur');
+            }
+        }
+        
+        // Toast
+        function showToast(message) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+            
+            const toast = document.createElement('div');
+      
