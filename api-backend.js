@@ -1,5 +1,5 @@
-// Noly Pro - Backend API v3
-// Features: Auth, Analytics, Bot Detection, Custom Thresholds
+// Noly Pro - Backend API v4
+// Enhanced Analytics: time tracking, patterns, multi-device
 
 const express = require('express');
 const cors = require('cors');
@@ -15,7 +15,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Config
 const JWT_SECRET = process.env.JWT_SECRET || 'noly-secret-key-2024';
 const resend = new Resend(process.env.RESEND_API_KEY);
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN 
@@ -29,7 +28,6 @@ const supabase = createClient(
 
 // ============ UTILITIES ============
 
-// Generate short code
 function generateShortCode() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let code = '';
@@ -39,7 +37,6 @@ function generateShortCode() {
   return code;
 }
 
-// Extract device info
 function extractDeviceInfo(userAgentString) {
   const agent = useragent.parse(userAgentString);
   const ua = userAgentString.toLowerCase();
@@ -61,7 +58,6 @@ function extractDeviceInfo(userAgentString) {
   };
 }
 
-// Get geolocation
 function getGeolocation(ip) {
   if (ip === '::1' || ip === '127.0.0.1' || ip.startsWith('192.168') || ip.startsWith('10.')) {
     return { country: 'Local', city: 'Local', region: '' };
@@ -75,7 +71,6 @@ function getGeolocation(ip) {
   };
 }
 
-// Detect bot
 function detectBot(userAgentString) {
   const ua = userAgentString.toLowerCase();
   const botPatterns = [
@@ -95,38 +90,61 @@ function detectBot(userAgentString) {
   return { isBot: false, botType: null };
 }
 
-// Calculate intent score
+function parseReferrer(referrer) {
+  if (!referrer || referrer === 'direct') return 'Direct';
+  try {
+    const url = new URL(referrer);
+    const host = url.hostname.toLowerCase();
+    if (host.includes('google')) return 'Google';
+    if (host.includes('facebook') || host.includes('fb.com')) return 'Facebook';
+    if (host.includes('linkedin')) return 'LinkedIn';
+    if (host.includes('twitter') || host.includes('t.co')) return 'Twitter/X';
+    if (host.includes('instagram')) return 'Instagram';
+    if (host.includes('whatsapp') || host.includes('wa.me')) return 'WhatsApp';
+    if (host.includes('mail') || host.includes('gmail') || host.includes('outlook')) return 'Email';
+    return host;
+  } catch (e) {
+    return 'Direct';
+  }
+}
+
+function formatDateFR(date) {
+  return new Date(date).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 function calculateIntentScore(clicks, threshold = 5) {
   if (!clicks || clicks.length === 0) return 0;
   
-  // Filter out bots
   const humanClicks = clicks.filter(c => !c.is_bot);
   if (humanClicks.length === 0) return 0;
   
   const totalVisits = humanClicks.length;
-  const avgDuration = humanClicks.reduce((sum, c) => sum + (c.duration || 0), 0) / humanClicks.length;
   const uniqueDevices = new Set(humanClicks.map(c => c.device_type)).size;
-  const uniqueIPs = new Set(humanClicks.map(c => c.ip_address)).size;
   
   let score = 0;
   
-  // Visit frequency (scaled to threshold)
+  // Score based on threshold - reaching threshold = 70%
   const visitRatio = totalVisits / threshold;
-  if (visitRatio >= 1.5) score += 70;
-  else if (visitRatio >= 1) score += 60;
-  else if (visitRatio >= 0.8) score += 50;
-  else if (visitRatio >= 0.6) score += 40;
-  else if (visitRatio >= 0.4) score += 25;
-  else score += 10;
+  if (visitRatio >= 1.2) score = 85;      // 20% above threshold
+  else if (visitRatio >= 1) score = 70;   // At threshold = HOT
+  else if (visitRatio >= 0.8) score = 55; // 80% of threshold
+  else if (visitRatio >= 0.6) score = 40; // 60% of threshold
+  else if (visitRatio >= 0.4) score = 25; // 40% of threshold
+  else if (visitRatio >= 0.2) score = 15; // 20% of threshold
+  else score = 5;
   
-  // Duration bonus
-  if (avgDuration > 120) score += 25;
-  else if (avgDuration > 60) score += 15;
-  else if (avgDuration > 30) score += 10;
-  else if (avgDuration > 0) score += 5;
+  // Bonus for multi-device (shows high interest)
+  if (uniqueDevices > 1) score += 10;
   
-  // Multi-device bonus
-  if (uniqueDevices > 1) score += 15;
+  // Bonus for return visits from same IP
+  const uniqueIPs = new Set(humanClicks.map(c => c.ip_address)).size;
+  if (totalVisits > uniqueIPs) score += 5; // Has return visits
   
   return Math.min(score, 100);
 }
@@ -251,7 +269,6 @@ function authMiddleware(req, res, next) {
 
 // ============ AUTH ENDPOINTS ============
 
-// Register
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
@@ -260,7 +277,6 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Email et mot de passe requis' });
     }
     
-    // Check if exists
     const { data: existing } = await supabase
       .from('users')
       .select('id')
@@ -271,10 +287,8 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Cet email existe deja' });
     }
     
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // Create user
     const { data: user, error } = await supabase
       .from('users')
       .insert({
@@ -289,7 +303,6 @@ app.post('/api/auth/register', async (req, res) => {
     
     if (error) throw error;
     
-    // Generate token
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
     
     res.json({ 
@@ -310,7 +323,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -319,7 +331,6 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email et mot de passe requis' });
     }
     
-    // Get user
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
@@ -330,13 +341,11 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
     }
     
-    // Check password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
     }
     
-    // Generate token
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
     
     res.json({ 
@@ -358,7 +367,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Get current user
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
@@ -378,7 +386,6 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Update user settings
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
     const { name, whatsapp, click_threshold } = req.body;
@@ -406,7 +413,6 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
 
 // ============ LINKS ENDPOINTS ============
 
-// Create link
 app.post('/api/links', authMiddleware, async (req, res) => {
   try {
     const { name, originalUrl, clickThreshold } = req.body;
@@ -452,7 +458,6 @@ app.post('/api/links', authMiddleware, async (req, res) => {
   }
 });
 
-// Get all links
 app.get('/api/links', authMiddleware, async (req, res) => {
   try {
     const { data: links, error } = await supabase
@@ -463,15 +468,18 @@ app.get('/api/links', authMiddleware, async (req, res) => {
     
     if (error) throw error;
     
-    // Get stats for each link
     const linksWithStats = await Promise.all(links.map(async (link) => {
       const { data: clicks } = await supabase
         .from('clicks')
         .select('*')
-        .eq('link_id', link.id);
+        .eq('link_id', link.id)
+        .order('timestamp', { ascending: false });
       
       const humanClicks = clicks?.filter(c => !c.is_bot) || [];
       const botClicks = clicks?.filter(c => c.is_bot) || [];
+      
+      // Get last click time
+      const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
       
       return {
         id: link.id,
@@ -480,12 +488,15 @@ app.get('/api/links', authMiddleware, async (req, res) => {
         shortCode: link.short_code,
         trackableUrl: `${process.env.BASE_URL || 'https://v.noly.pro'}/d/${link.short_code}`,
         clickThreshold: link.click_threshold || 5,
+        alertsEnabled: link.alerts_enabled !== false,
         createdAt: link.created_at,
         stats: {
           totalClicks: humanClicks.length,
           botClicks: botClicks.length,
           intentScore: calculateIntentScore(clicks, link.click_threshold || 5),
-          uniqueVisitors: new Set(humanClicks.map(c => c.ip_address)).size
+          uniqueVisitors: new Set(humanClicks.map(c => c.ip_address)).size,
+          lastClickAt: lastClick ? lastClick.timestamp : null,
+          lastClickFormatted: lastClick ? formatDateFR(lastClick.timestamp) : null
         }
       };
     }));
@@ -513,7 +524,6 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Lien non trouve' });
     }
     
-    // Get all clicks
     const { data: clicks } = await supabase
       .from('clicks')
       .select('*')
@@ -523,7 +533,79 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
     const humanClicks = clicks?.filter(c => !c.is_bot) || [];
     const botClicks = clicks?.filter(c => c.is_bot) || [];
     
-    // Group by IP for visitor analysis
+    // ===== ENHANCED ANALYTICS =====
+    
+    // 1. Last click
+    const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
+    
+    // 2. Hour analysis (preferred hours)
+    const hourCounts = {};
+    humanClicks.forEach(click => {
+      const hour = new Date(click.timestamp).getHours();
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    });
+    const preferredHours = Object.entries(hourCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([hour, count]) => ({ hour: parseInt(hour), count }));
+    
+    // 3. Day of week analysis
+    const dayCounts = {};
+    const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    humanClicks.forEach(click => {
+      const day = new Date(click.timestamp).getDay();
+      dayCounts[day] = (dayCounts[day] || 0) + 1;
+    });
+    const preferredDays = Object.entries(dayCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([day, count]) => ({ day: dayNames[parseInt(day)], count }));
+    
+    // 4. Return delays (time between visits for same IP)
+    const ipVisits = {};
+    humanClicks.forEach(click => {
+      const ip = click.ip_address;
+      if (!ipVisits[ip]) ipVisits[ip] = [];
+      ipVisits[ip].push(new Date(click.timestamp));
+    });
+    
+    const returnDelays = [];
+    Object.values(ipVisits).forEach(visits => {
+      if (visits.length > 1) {
+        visits.sort((a, b) => a - b);
+        for (let i = 1; i < visits.length; i++) {
+          const delayMs = visits[i] - visits[i-1];
+          const delayMin = Math.round(delayMs / 60000);
+          returnDelays.push(delayMin);
+        }
+      }
+    });
+    const avgReturnDelay = returnDelays.length > 0 
+      ? Math.round(returnDelays.reduce((a, b) => a + b, 0) / returnDelays.length)
+      : null;
+    
+    // 5. Referrer analysis
+    const referrerCounts = {};
+    humanClicks.forEach(click => {
+      const source = parseReferrer(click.referrer);
+      referrerCounts[source] = (referrerCounts[source] || 0) + 1;
+    });
+    const referrerBreakdown = Object.entries(referrerCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([source, count]) => ({ source, count }));
+    
+    // 6. Multi-device detection
+    const ipDevices = {};
+    humanClicks.forEach(click => {
+      const ip = click.ip_address;
+      if (!ipDevices[ip]) ipDevices[ip] = new Set();
+      ipDevices[ip].add(click.device_type);
+    });
+    const multiDeviceUsers = Object.entries(ipDevices)
+      .filter(([ip, devices]) => devices.size > 1)
+      .map(([ip, devices]) => ({ ip, devices: Array.from(devices) }));
+    
+    // 7. Visitors with return count
     const visitorMap = {};
     humanClicks.forEach(click => {
       const ip = click.ip_address;
@@ -536,17 +618,15 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
           browser: click.browser,
           os: click.os,
           visits: [],
-          totalDuration: 0,
           firstVisit: click.timestamp,
           lastVisit: click.timestamp
         };
       }
       visitorMap[ip].visits.push({
         timestamp: click.timestamp,
-        duration: click.duration || 0,
-        device: click.device_type
+        device: click.device_type,
+        referrer: parseReferrer(click.referrer)
       });
-      visitorMap[ip].totalDuration += click.duration || 0;
       if (new Date(click.timestamp) < new Date(visitorMap[ip].firstVisit)) {
         visitorMap[ip].firstVisit = click.timestamp;
       }
@@ -558,15 +638,10 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
     const visitors = Object.values(visitorMap).map(v => ({
       ...v,
       visitCount: v.visits.length,
-      avgDuration: v.visits.length > 0 ? Math.round(v.totalDuration / v.visits.length) : 0
+      firstVisitFormatted: formatDateFR(v.firstVisit),
+      lastVisitFormatted: formatDateFR(v.lastVisit),
+      isMultiDevice: ipDevices[v.ip]?.size > 1
     })).sort((a, b) => b.visitCount - a.visitCount);
-    
-    // Bot analysis
-    const botAnalysis = {};
-    botClicks.forEach(click => {
-      const type = click.bot_type || 'unknown';
-      botAnalysis[type] = (botAnalysis[type] || 0) + 1;
-    });
     
     // Geographic breakdown
     const geoBreakdown = {};
@@ -581,6 +656,17 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
       deviceBreakdown[click.device_type] = (deviceBreakdown[click.device_type] || 0) + 1;
     });
     
+    // Recent clicks with formatted time
+    const recentClicks = humanClicks.slice(0, 20).map(c => ({
+      timestamp: c.timestamp,
+      timestampFormatted: formatDateFR(c.timestamp),
+      city: c.city,
+      country: c.country,
+      device: c.device_type,
+      browser: c.browser,
+      referrer: parseReferrer(c.referrer)
+    }));
+    
     res.json({
       success: true,
       link: {
@@ -590,6 +676,7 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
         shortCode: link.short_code,
         trackableUrl: `${process.env.BASE_URL || 'https://v.noly.pro'}/d/${link.short_code}`,
         clickThreshold: link.click_threshold || 5,
+        alertsEnabled: link.alerts_enabled !== false,
         createdAt: link.created_at
       },
       analytics: {
@@ -597,21 +684,32 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
         botClicks: botClicks.length,
         uniqueVisitors: visitors.length,
         intentScore: calculateIntentScore(clicks, link.click_threshold || 5),
-        avgDuration: humanClicks.length > 0 
-          ? Math.round(humanClicks.reduce((sum, c) => sum + (c.duration || 0), 0) / humanClicks.length)
-          : 0,
-        visitors,
-        botAnalysis,
+        
+        // Last click info
+        lastClickAt: lastClick?.timestamp || null,
+        lastClickFormatted: lastClick ? formatDateFR(lastClick.timestamp) : 'Aucun clic',
+        lastClickCity: lastClick?.city || null,
+        lastClickDevice: lastClick?.device_type || null,
+        
+        // Time patterns
+        preferredHours,
+        preferredDays,
+        avgReturnDelayMinutes: avgReturnDelay,
+        
+        // Sources
+        referrerBreakdown,
+        
+        // Multi-device
+        multiDeviceUsers,
+        hasMultiDeviceActivity: multiDeviceUsers.length > 0,
+        
+        // Breakdowns
         geoBreakdown,
         deviceBreakdown,
-        recentClicks: humanClicks.slice(0, 20).map(c => ({
-          timestamp: c.timestamp,
-          city: c.city,
-          country: c.country,
-          device: c.device_type,
-          browser: c.browser,
-          duration: c.duration
-        }))
+        
+        // Visitors
+        visitors,
+        recentClicks
       }
     });
     
@@ -621,15 +719,13 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
   }
 });
 
-// Delete link
 app.delete('/api/links/:linkId', authMiddleware, async (req, res) => {
   try {
     const { linkId } = req.params;
     
-    // Delete clicks first
     await supabase.from('clicks').delete().eq('link_id', linkId);
+    await supabase.from('alerts_sent').delete().eq('link_id', linkId);
     
-    // Delete link
     const { error } = await supabase
       .from('links')
       .delete()
@@ -645,45 +741,51 @@ app.delete('/api/links/:linkId', authMiddleware, async (req, res) => {
   }
 });
 
-// Get hot links
-app.get('/api/links/hot', authMiddleware, async (req, res) => {
+// Toggle alerts for a link
+app.put('/api/links/:linkId/alerts', authMiddleware, async (req, res) => {
   try {
-    const { data: links } = await supabase
+    const { linkId } = req.params;
+    const { enabled } = req.body;
+    
+    console.log('Toggle alerts:', linkId, 'enabled:', enabled);
+    
+    // First check if link exists and belongs to user
+    const { data: existingLink, error: findError } = await supabase
       .from('links')
-      .select('*')
-      .eq('user_id', req.userId);
+      .select('id, alerts_enabled')
+      .eq('id', linkId)
+      .eq('user_id', req.userId)
+      .single();
     
-    const hotLinks = [];
-    
-    for (const link of links || []) {
-      const { data: clicks } = await supabase
-        .from('clicks')
-        .select('*')
-        .eq('link_id', link.id);
-      
-      const intentScore = calculateIntentScore(clicks, link.click_threshold || 5);
-      const humanClicks = clicks?.filter(c => !c.is_bot) || [];
-      
-      if (intentScore >= 70) {
-        hotLinks.push({
-          id: link.id,
-          name: link.name,
-          shortCode: link.short_code,
-          trackableUrl: `${process.env.BASE_URL || 'https://v.noly.pro'}/d/${link.short_code}`,
-          intentScore,
-          totalClicks: humanClicks.length,
-          latestClick: humanClicks[0]
-        });
-      }
+    if (findError || !existingLink) {
+      console.log('Link not found:', findError);
+      return res.status(404).json({ error: 'Lien non trouve' });
     }
     
-    res.json({ 
-      success: true, 
-      hotLinks: hotLinks.sort((a, b) => b.intentScore - a.intentScore) 
-    });
+    // Update alerts_enabled
+    const { data: link, error } = await supabase
+      .from('links')
+      .update({ alerts_enabled: enabled })
+      .eq('id', linkId)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.log('Update error:', error);
+      // If column doesn't exist, try to handle gracefully
+      if (error.message && error.message.includes('alerts_enabled')) {
+        return res.status(500).json({ error: 'Colonne alerts_enabled manquante. Executez la migration SQL.' });
+      }
+      throw error;
+    }
+    
+    console.log('Alerts updated:', link.alerts_enabled);
+    res.json({ success: true, alertsEnabled: link.alerts_enabled });
     
   } catch (error) {
-    res.status(500).json({ error: 'Erreur' });
+    console.error('Toggle alerts error:', error);
+    res.status(500).json({ error: 'Erreur mise a jour: ' + (error.message || 'inconnue') });
   }
 });
 
@@ -693,7 +795,6 @@ app.get('/d/:shortCode', async (req, res) => {
   try {
     const { shortCode } = req.params;
     
-    // Get link
     const { data: link, error } = await supabase
       .from('links')
       .select('*')
@@ -704,7 +805,6 @@ app.get('/d/:shortCode', async (req, res) => {
       return res.status(404).send('Page non trouvee');
     }
     
-    // Extract data
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
     const userAgent = req.headers['user-agent'] || '';
     const referrer = req.headers['referer'] || 'direct';
@@ -714,7 +814,6 @@ app.get('/d/:shortCode', async (req, res) => {
     const botInfo = detectBot(userAgent);
     const sessionId = `${ip}-${Date.now()}`;
     
-    // Count previous visits
     const { data: prevClicks } = await supabase
       .from('clicks')
       .select('id')
@@ -723,7 +822,6 @@ app.get('/d/:shortCode', async (req, res) => {
     
     const visitNumber = (prevClicks?.length || 0) + 1;
     
-    // Record click
     await supabase.from('clicks').insert({
       link_id: link.id,
       ip_address: ip,
@@ -740,11 +838,10 @@ app.get('/d/:shortCode', async (req, res) => {
       session_id: sessionId,
       visit_number: visitNumber,
       is_bot: botInfo.isBot,
-      bot_type: botInfo.botType,
-      duration: 0
+      bot_type: botInfo.botType
     });
     
-    // Auto-alert check (async)
+    // Auto-alert check
     if (!botInfo.isBot) {
       setImmediate(async () => {
         try {
@@ -760,7 +857,12 @@ app.get('/d/:shortCode', async (req, res) => {
           console.log(`Click: ${shortCode} | Visits: ${allClicks.filter(c => !c.is_bot).length} | Score: ${intentScore}%`);
           
           if (intentScore >= 70) {
-            // Check recent alerts
+            // Check if alerts are enabled for this link
+            if (link.alerts_enabled === false) {
+              console.log('Alerts disabled for link: ' + link.name);
+              return;
+            }
+            
             const { data: recentAlerts } = await supabase
               .from('alerts_sent')
               .select('id')
@@ -806,7 +908,6 @@ app.get('/d/:shortCode', async (req, res) => {
       });
     }
     
-    // Redirect
     res.redirect(302, link.original_url);
     
   } catch (error) {
@@ -815,37 +916,15 @@ app.get('/d/:shortCode', async (req, res) => {
   }
 });
 
-// Update duration
-app.post('/api/track/duration', express.text({ type: '*/*' }), async (req, res) => {
-  try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const { linkId, sessionId, duration } = body;
-    
-    if (linkId && sessionId && duration !== undefined) {
-      await supabase
-        .from('clicks')
-        .update({ duration })
-        .eq('link_id', linkId)
-        .eq('session_id', sessionId);
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed' });
-  }
-});
-
-// Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '3.0' });
+  res.json({ status: 'ok', version: '4.0' });
 });
 
-// Legacy redirect
 app.get('/:shortCode', (req, res) => {
   res.redirect(301, '/d/' + req.params.shortCode);
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('Noly API v3 running on port ' + PORT);
+  console.log('Noly API v4 running on port ' + PORT);
 });
