@@ -149,7 +149,7 @@ async function sendEmailAlert(prospectName, linkName, intentScore, clickCount, l
     console.log('Sending email to: ' + userEmail);
     
     await resend.emails.send({
-      from: 'MonChezMoi <alerte@monchezmoi.click>',
+      from: 'Noly <alerte@noly.pro>',
       to: userEmail,
       subject: 'Prospect interesse : ' + prospectClean + ' - ' + linkName,
       html: `
