@@ -12,7 +12,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-app.use(cors());
+
+// CORS configuration for iOS Safari
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'noly-secret-key-2024';
