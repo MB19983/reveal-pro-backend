@@ -1,5 +1,5 @@
-// Noly Pro - Backend API FINAL
-// Works on all devices - PC, iOS, Android
+// Noly Pro - Backend API with STRIPE
+// Version 6.0 - Payments enabled
 
 const express = require('express');
 const cors = require('cors');
@@ -10,16 +10,144 @@ const { Resend } = require('resend');
 const twilio = require('twilio');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const Stripe = require('stripe');
 
 const app = express();
+
+// Stripe - use raw body for webhooks
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
 // CORS - Allow all origins
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'stripe-signature']
 }));
 
+// Stripe webhook needs raw body
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    if (STRIPE_WEBHOOK_SECRET) {
+      event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+    } else {
+      event = JSON.parse(req.body);
+    }
+  } catch (err) {
+    console.error('Webhook signature error:', err.message);
+    return res.status(400).send('Webhook Error: ' + err.message);
+  }
+
+  console.log('Stripe webhook:', event.type);
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const userId = session.metadata.user_id;
+        const customerId = session.customer;
+        const subscriptionId = session.subscription;
+
+        console.log('Checkout completed for user:', userId);
+
+        // Update user to Pro
+        await supabase
+          .from('users')
+          .update({
+            plan: 'pro',
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscriptionId,
+            subscription_status: 'active'
+          })
+          .eq('id', userId);
+
+        break;
+      }
+
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+        const status = subscription.status;
+
+        console.log('Subscription updated:', status);
+
+        const { data: user } = await supabase
+          .from('users')
+          .select('id')
+          .eq('stripe_customer_id', customerId)
+          .single();
+
+        if (user) {
+          await supabase
+            .from('users')
+            .update({
+              subscription_status: status,
+              plan: status === 'active' ? 'pro' : 'free'
+            })
+            .eq('id', user.id);
+        }
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+
+        console.log('Subscription cancelled');
+
+        const { data: user } = await supabase
+          .from('users')
+          .select('id')
+          .eq('stripe_customer_id', customerId)
+          .single();
+
+        if (user) {
+          await supabase
+            .from('users')
+            .update({
+              plan: 'free',
+              subscription_status: 'cancelled',
+              stripe_subscription_id: null
+            })
+            .eq('id', user.id);
+        }
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        const customerId = invoice.customer;
+
+        console.log('Payment failed for customer:', customerId);
+
+        const { data: user } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('stripe_customer_id', customerId)
+          .single();
+
+        if (user) {
+          await supabase
+            .from('users')
+            .update({ subscription_status: 'past_due' })
+            .eq('id', user.id);
+        }
+        break;
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// Now use JSON parser for other routes
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'noly-secret-key-2024';
@@ -32,6 +160,12 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
+// Plan limits
+const PLAN_LIMITS = {
+  free: 2,
+  pro: 999999
+};
 
 // ============ UTILITIES ============
 
@@ -119,7 +253,6 @@ function calculateIntentScore(clicks, threshold) {
   
   let score = 0;
   
-  // Score based on threshold - reaching threshold = 70%
   const visitRatio = totalVisits / threshold;
   if (visitRatio >= 1.2) score = 85;
   else if (visitRatio >= 1) score = 70;
@@ -129,10 +262,8 @@ function calculateIntentScore(clicks, threshold) {
   else if (visitRatio >= 0.2) score = 15;
   else score = 5;
   
-  // Bonus for multi-device
   if (uniqueDevices > 1) score += 10;
   
-  // Bonus for return visits
   const uniqueIPs = new Set(humanClicks.map(c => c.ip_address)).size;
   if (totalVisits > uniqueIPs) score += 5;
   
@@ -263,7 +394,6 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Mot de passe trop court (min 6 caracteres)' });
     }
     
-    // Check if email exists
     const { data: existing } = await supabase
       .from('users')
       .select('id')
@@ -350,9 +480,10 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        plan: user.plan,
+        plan: user.plan || 'free',
         whatsapp: user.whatsapp,
-        click_threshold: user.click_threshold || 5
+        click_threshold: user.click_threshold || 5,
+        subscription_status: user.subscription_status
       }
     });
     
@@ -366,7 +497,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, plan, whatsapp, click_threshold')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id')
       .eq('id', req.userId)
       .single();
     
@@ -374,7 +505,23 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Utilisateur non trouve' });
     }
     
-    res.json({ success: true, user });
+    // Count user's links
+    const { count } = await supabase
+      .from('links')
+      .select('id', { count: 'exact' })
+      .eq('user_id', req.userId);
+    
+    const limit = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+    
+    res.json({ 
+      success: true, 
+      user: {
+        ...user,
+        linksCount: count || 0,
+        linksLimit: limit,
+        canCreateLink: (count || 0) < limit
+      }
+    });
     
   } catch (error) {
     res.status(500).json({ error: 'Erreur' });
@@ -393,7 +540,7 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
       .from('users')
       .update(updates)
       .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, click_threshold')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status')
       .single();
     
     if (error) throw error;
@@ -405,6 +552,103 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   }
 });
 
+// ============ STRIPE ENDPOINTS ============
+
+// Create checkout session
+app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, name, stripe_customer_id')
+      .eq('id', req.userId)
+      .single();
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouve' });
+    }
+    
+    const sessionConfig = {
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [{
+        price: STRIPE_PRICE_ID,
+        quantity: 1
+      }],
+      success_url: 'https://app.noly.pro?payment=success',
+      cancel_url: 'https://app.noly.pro?payment=cancelled',
+      metadata: {
+        user_id: user.id
+      },
+      allow_promotion_codes: true,
+      billing_address_collection: 'auto'
+    };
+    
+    // Use existing customer if available
+    if (user.stripe_customer_id) {
+      sessionConfig.customer = user.stripe_customer_id;
+    } else {
+      sessionConfig.customer_email = user.email;
+    }
+    
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+    
+    console.log('Checkout session created:', session.id);
+    
+    res.json({ success: true, url: session.url });
+    
+  } catch (error) {
+    console.error('Checkout error:', error);
+    res.status(500).json({ error: 'Erreur creation paiement' });
+  }
+});
+
+// Customer portal (manage subscription)
+app.post('/api/stripe/portal', authMiddleware, async (req, res) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', req.userId)
+      .single();
+    
+    if (!user || !user.stripe_customer_id) {
+      return res.status(400).json({ error: 'Pas d\'abonnement actif' });
+    }
+    
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripe_customer_id,
+      return_url: 'https://app.noly.pro'
+    });
+    
+    res.json({ success: true, url: session.url });
+    
+  } catch (error) {
+    console.error('Portal error:', error);
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// Get subscription status
+app.get('/api/stripe/status', authMiddleware, async (req, res) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('plan, subscription_status, stripe_subscription_id')
+      .eq('id', req.userId)
+      .single();
+    
+    res.json({
+      success: true,
+      plan: user.plan || 'free',
+      status: user.subscription_status,
+      hasSubscription: !!user.stripe_subscription_id
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
 // ============ LINKS ENDPOINTS ============
 
 app.post('/api/links', authMiddleware, async (req, res) => {
@@ -413,6 +657,28 @@ app.post('/api/links', authMiddleware, async (req, res) => {
     
     if (!name || !originalUrl) {
       return res.status(400).json({ error: 'Nom et URL requis' });
+    }
+    
+    // Check plan limits
+    const { data: user } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', req.userId)
+      .single();
+    
+    const { count } = await supabase
+      .from('links')
+      .select('id', { count: 'exact' })
+      .eq('user_id', req.userId);
+    
+    const limit = PLAN_LIMITS[user?.plan] || PLAN_LIMITS.free;
+    
+    if ((count || 0) >= limit) {
+      return res.status(403).json({ 
+        error: 'Limite atteinte',
+        message: 'Passez a Pro pour creer plus de liens',
+        upgrade: true
+      });
     }
     
     const shortCode = generateShortCode();
@@ -529,7 +795,6 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
     const humanClicks = (clicks || []).filter(c => !c.is_bot);
     const botClicks = (clicks || []).filter(c => c.is_bot);
     
-    // Last click
     const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
     
     // Hour analysis
@@ -831,7 +1096,7 @@ app.get('/d/:shortCode', async (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '5.0' });
+  res.json({ status: 'ok', version: '6.0-stripe' });
 });
 
 // Redirect shortcode without /d/
@@ -845,5 +1110,5 @@ app.get('/:shortCode', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('Noly API v5 FINAL running on port ' + PORT);
+  console.log('Noly API v6 STRIPE running on port ' + PORT);
 });
