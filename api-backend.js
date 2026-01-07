@@ -563,6 +563,112 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   }
 });
 
+// Forgot password - send reset email
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email requis' });
+    }
+    
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+    
+    // Always return success to prevent email enumeration
+    if (!user) {
+      return res.json({ success: true });
+    }
+    
+    // Generate reset token (valid 1 hour)
+    const resetToken = jwt.sign(
+      { userId: user.id, type: 'reset' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    
+    // Send reset email
+    const resetUrl = 'https://app.noly.pro?reset=' + resetToken;
+    
+    await resend.emails.send({
+      from: 'Noly <noreply@noly.pro>',
+      to: user.email,
+      subject: 'Reinitialisation de votre mot de passe Noly',
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="margin: 0; font-size: 24px;">Noly</h1>
+          </div>
+          <div style="background: #1a1a2e; padding: 30px; color: #e0e0e0; border-radius: 0 0 10px 10px;">
+            <h2 style="color: #667eea; margin-top: 0;">Reinitialisation du mot de passe</h2>
+            <p>Bonjour ${user.name || 'there'},</p>
+            <p>Vous avez demande a reinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous :</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block;">Reinitialiser mon mot de passe</a>
+            </div>
+            <p style="color: #888; font-size: 14px;">Ce lien expire dans 1 heure.</p>
+            <p style="color: #888; font-size: 14px;">Si vous n'avez pas fait cette demande, ignorez cet email.</p>
+          </div>
+        </div>
+      `
+    });
+    
+    console.log('Reset email sent to', user.email);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Erreur envoi email' });
+  }
+});
+
+// Reset password with token
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token et mot de passe requis' });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caracteres)' });
+    }
+    
+    // Verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded.type !== 'reset') {
+        throw new Error('Invalid token type');
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Lien expire ou invalide' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const { error } = await supabase
+      .from('users')
+      .update({ password: hashedPassword })
+      .eq('id', decoded.userId);
+    
+    if (error) throw error;
+    
+    console.log('Password reset for user:', decoded.userId);
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Erreur reinitialisation' });
+  }
+});
+
 // ============ STRIPE ENDPOINTS ============
 
 // Create checkout session
