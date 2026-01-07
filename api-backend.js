@@ -532,9 +532,20 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
     const { name, whatsapp } = req.body;
     
+    // Get current user to check plan
+    const { data: currentUser } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', req.userId)
+      .single();
+    
     const updates = {};
     if (name !== undefined) updates.name = name;
-    if (whatsapp !== undefined) updates.whatsapp = whatsapp;
+    
+    // Only Pro users can save WhatsApp
+    if (whatsapp !== undefined && currentUser?.plan === 'pro') {
+      updates.whatsapp = whatsapp;
+    }
     
     const { data: user, error } = await supabase
       .from('users')
@@ -1060,7 +1071,7 @@ app.get('/d/:shortCode', async (req, res) => {
               
               const { data: user } = await supabase
                 .from('users')
-                .select('email, whatsapp')
+                .select('email, whatsapp, plan')
                 .eq('id', link.user_id)
                 .single();
               
@@ -1068,7 +1079,8 @@ app.get('/d/:shortCode', async (req, res) => {
                 if (user.email) {
                   await sendEmailAlert(link.name, intentScore, humanClicks.length, humanClicks[0], user.email);
                 }
-                if (user.whatsapp) {
+                // WhatsApp only for Pro users
+                if (user.whatsapp && user.plan === 'pro') {
                   await sendWhatsAppAlert(link.name, intentScore, humanClicks.length, user.whatsapp);
                 }
                 
