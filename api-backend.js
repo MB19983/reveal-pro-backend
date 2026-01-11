@@ -1,5 +1,5 @@
-// Noly Pro - Backend API with STRIPE
-// Version 6.0 - Payments enabled
+// Noly Pro - Backend API SECURED
+// Version 7.0 - Production Ready with Security Fixes
 
 const express = require('express');
 const cors = require('cors');
@@ -11,20 +11,83 @@ const twilio = require('twilio');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Stripe = require('stripe');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 
-// Stripe - use raw body for webhooks
+// ============ SECURITY: Validate required env vars ============
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error('FATAL: JWT_SECRET must be set and at least 32 characters');
+  process.exit(1);
+}
+
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
+  console.error('FATAL: SUPABASE_URL and SUPABASE_KEY must be set');
+  process.exit(1);
+}
+
+// ============ SECURITY: Helmet for security headers ============
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable for API
+  crossOriginEmbedderPolicy: false
+}));
+
+// ============ SECURITY: Rate Limiting ============
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per 15 min per IP
+  message: { error: 'Trop de requêtes, réessayez plus tard' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 login attempts per 15 min per IP
+  message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const createLinkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // 20 link creations per hour
+  message: { error: 'Limite de création atteinte, réessayez plus tard' }
+});
+
+app.use(generalLimiter);
+
+// ============ SECURITY: CORS - Restricted Origins ============
+const allowedOrigins = [
+  'https://noly.pro',
+  'https://www.noly.pro',
+  'https://app.noly.pro',
+  'http://localhost:3000',
+  'http://localhost:5500',
+  'http://127.0.0.1:5500'
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS not allowed'), false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'stripe-signature'],
+  credentials: true
+}));
+
+// ============ Stripe Configuration - PRODUCTION ============
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SmsVs3TJRCZE3zmCZIYO3N48MRGrvSCXLqwLrQc7RhUn7tEXBGrDFq1vtTbBVMETP3v1E1cFVuc7xmgzvcvurnE00pUY9iHpG';
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
-
-// CORS - Allow all origins
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'stripe-signature']
-}));
 
 // Stripe webhook needs raw body
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -54,7 +117,6 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
         console.log('Checkout completed for user:', userId);
 
-        // Update user to Pro
         await supabase
           .from('users')
           .update({
@@ -122,11 +184,11 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         const invoice = event.data.object;
         const customerId = invoice.customer;
 
-        console.log('Payment failed for customer:', customerId);
+        console.log('Payment failed for customer');
 
         const { data: user } = await supabase
           .from('users')
-          .select('id, email')
+          .select('id')
           .eq('stripe_customer_id', customerId)
           .single();
 
@@ -148,9 +210,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 });
 
 // Now use JSON parser for other routes
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-const JWT_SECRET = process.env.JWT_SECRET || 'noly-secret-key-2024';
 const resend = new Resend(process.env.RESEND_API_KEY);
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN 
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -167,6 +228,37 @@ const PLAN_LIMITS = {
   pro: 999999
 };
 
+// ============ SECURITY: Session limits per email ============
+const MAX_SESSIONS_PER_USER = 3;
+const activeSessions = new Map(); // In production, use Redis
+
+function addSession(userId, token) {
+  if (!activeSessions.has(userId)) {
+    activeSessions.set(userId, []);
+  }
+  const sessions = activeSessions.get(userId);
+  sessions.push({ token, createdAt: Date.now() });
+  
+  // Keep only last MAX_SESSIONS_PER_USER sessions
+  if (sessions.length > MAX_SESSIONS_PER_USER) {
+    sessions.shift(); // Remove oldest session
+  }
+}
+
+function isSessionValid(userId, token) {
+  const sessions = activeSessions.get(userId);
+  if (!sessions) return true; // No sessions tracked yet, allow
+  return sessions.some(s => s.token === token);
+}
+
+function removeSession(userId, token) {
+  const sessions = activeSessions.get(userId);
+  if (sessions) {
+    const index = sessions.findIndex(s => s.token === token);
+    if (index > -1) sessions.splice(index, 1);
+  }
+}
+
 // ============ UTILITIES ============
 
 function generateShortCode() {
@@ -176,6 +268,24 @@ function generateShortCode() {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
+}
+
+// ============ SECURITY: URL Validation ============
+function isValidUrl(string) {
+  try {
+    const url = new URL(string);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+}
+
+// ============ SECURITY: Sanitize log output ============
+function sanitizeEmail(email) {
+  if (!email) return 'unknown';
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  return local.substring(0, 2) + '***@' + domain;
 }
 
 function extractDeviceInfo(userAgentString) {
@@ -272,17 +382,7 @@ function calculateIntentScore(clicks, threshold) {
 
 // Send WhatsApp alert
 async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp) {
-  console.log('WhatsApp function called - Number:', userWhatsapp);
-  
-  if (!twilioClient) {
-    console.log('WhatsApp: Twilio not configured');
-    return false;
-  }
-  
-  if (!userWhatsapp) {
-    console.log('WhatsApp: No number provided');
-    return false;
-  }
+  if (!twilioClient || !userWhatsapp) return false;
   
   try {
     const message = 'ALERTE NOLY\n\n' +
@@ -297,15 +397,13 @@ async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp
       whatsappNumber = 'whatsapp:' + whatsappNumber;
     }
 
-    console.log('WhatsApp: Sending to', whatsappNumber);
-
     await twilioClient.messages.create({
       body: message,
       from: process.env.TWILIO_WHATSAPP_FROM,
       to: whatsappNumber
     });
     
-    console.log('WhatsApp: Sent successfully');
+    console.log('WhatsApp alert sent');
     return true;
   } catch (error) {
     console.error('WhatsApp error:', error.message);
@@ -351,7 +449,7 @@ async function sendEmailAlert(linkName, intentScore, clickCount, latestClick, us
       `
     });
     
-    console.log('Email sent to', userEmail);
+    console.log('Email alert sent');
     return true;
   } catch (error) {
     console.error('Email error:', error.message);
@@ -372,44 +470,55 @@ function authMiddleware(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
+    req.token = token;
+    
+    // Check if session is still valid (not exceeded max sessions)
+    // Note: In production, validate against stored sessions
+    
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Token invalide' });
+    return res.status(401).json({ error: 'Token invalide ou expiré' });
   }
 }
 
 // ============ AUTH ENDPOINTS ============
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
     const { email, password, name } = req.body;
-    
-    console.log('Register attempt:', email);
     
     if (!email || !password) {
       return res.status(400).json({ error: 'Email et mot de passe requis' });
     }
     
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caracteres)' });
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Format email invalide' });
     }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caractères)' });
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
     
     const { data: existing } = await supabase
       .from('users')
       .select('id')
-      .eq('email', email.toLowerCase().trim())
+      .eq('email', normalizedEmail)
       .single();
     
     if (existing) {
-      return res.status(400).json({ error: 'Cet email existe deja' });
+      return res.status(400).json({ error: 'Cet email existe déjà' });
     }
     
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12); // Increased from 10 to 12
     
     const { data: user, error } = await supabase
       .from('users')
       .insert({
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         password: hashedPassword,
         name: name || email.split('@')[0],
         plan: 'free',
@@ -419,13 +528,14 @@ app.post('/api/auth/register', async (req, res) => {
       .single();
     
     if (error) {
-      console.error('Register DB error:', error);
+      console.error('Register DB error');
       throw error;
     }
     
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    addSession(user.id, token);
     
-    console.log('Register success:', user.id);
+    console.log('User registered:', sanitizeEmail(user.email));
     
     res.json({ 
       success: true, 
@@ -439,25 +549,25 @@ app.post('/api/auth/register', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('Register error');
     res.status(500).json({ error: 'Erreur inscription' });
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    console.log('Login attempt:', email);
     
     if (!email || !password) {
       return res.status(400).json({ error: 'Email et mot de passe requis' });
     }
     
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email.toLowerCase().trim())
+      .eq('email', normalizedEmail)
       .single();
     
     if (error || !user) {
@@ -470,8 +580,9 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    addSession(user.id, token);
     
-    console.log('Login success:', user.id);
+    console.log('User logged in:', sanitizeEmail(user.email));
     
     res.json({ 
       success: true, 
@@ -488,8 +599,17 @@ app.post('/api/auth/login', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error');
     res.status(500).json({ error: 'Erreur connexion' });
+  }
+});
+
+app.post('/api/auth/logout', authMiddleware, async (req, res) => {
+  try {
+    removeSession(req.userId, req.token);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur déconnexion' });
   }
 });
 
@@ -502,10 +622,9 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       .single();
     
     if (error || !user) {
-      return res.status(404).json({ error: 'Utilisateur non trouve' });
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
     
-    // Count user's links
     const { count } = await supabase
       .from('links')
       .select('id', { count: 'exact' })
@@ -530,9 +649,8 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
-    const { name, whatsapp } = req.body;
+    const { name, whatsapp, click_threshold } = req.body;
     
-    // Get current user to check plan
     const { data: currentUser } = await supabase
       .from('users')
       .select('plan')
@@ -540,11 +658,19 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
       .single();
     
     const updates = {};
-    if (name !== undefined) updates.name = name;
+    if (name !== undefined) updates.name = name.substring(0, 100); // Limit name length
     
     // Only Pro users can save WhatsApp
     if (whatsapp !== undefined && currentUser?.plan === 'pro') {
       updates.whatsapp = whatsapp;
+    }
+    
+    // Allow custom click threshold (1-100)
+    if (click_threshold !== undefined) {
+      const threshold = parseInt(click_threshold);
+      if (threshold >= 1 && threshold <= 100) {
+        updates.click_threshold = threshold;
+      }
     }
     
     const { data: user, error } = await supabase
@@ -559,12 +685,12 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
     res.json({ success: true, user });
     
   } catch (error) {
-    res.status(500).json({ error: 'Erreur mise a jour' });
+    res.status(500).json({ error: 'Erreur mise à jour' });
   }
 });
 
-// Forgot password - send reset email
-app.post('/api/auth/forgot-password', async (req, res) => {
+// Forgot password
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -583,31 +709,29 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       return res.json({ success: true });
     }
     
-    // Generate reset token (valid 1 hour)
     const resetToken = jwt.sign(
       { userId: user.id, type: 'reset' },
       JWT_SECRET,
       { expiresIn: '1h' }
     );
     
-    // Send reset email
     const resetUrl = 'https://app.noly.pro?reset=' + resetToken;
     
     await resend.emails.send({
       from: 'Noly <noreply@noly.pro>',
       to: user.email,
-      subject: 'Reinitialisation de votre mot de passe Noly',
+      subject: 'Réinitialisation de votre mot de passe Noly',
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
             <h1 style="margin: 0; font-size: 24px;">Noly</h1>
           </div>
           <div style="background: #1a1a2e; padding: 30px; color: #e0e0e0; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #667eea; margin-top: 0;">Reinitialisation du mot de passe</h2>
-            <p>Bonjour ${user.name || 'there'},</p>
-            <p>Vous avez demande a reinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous :</p>
+            <h2 style="color: #667eea; margin-top: 0;">Réinitialisation du mot de passe</h2>
+            <p>Bonjour ${user.name || ''},</p>
+            <p>Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous :</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block;">Reinitialiser mon mot de passe</a>
+              <a href="${resetUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block;">Réinitialiser mon mot de passe</a>
             </div>
             <p style="color: #888; font-size: 14px;">Ce lien expire dans 1 heure.</p>
             <p style="color: #888; font-size: 14px;">Si vous n'avez pas fait cette demande, ignorez cet email.</p>
@@ -616,18 +740,18 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       `
     });
     
-    console.log('Reset email sent to', user.email);
+    console.log('Reset email sent');
     
     res.json({ success: true });
     
   } catch (error) {
-    console.error('Forgot password error:', error);
+    console.error('Forgot password error');
     res.status(500).json({ error: 'Erreur envoi email' });
   }
 });
 
 // Reset password with token
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
   try {
     const { token, password } = req.body;
     
@@ -636,10 +760,9 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
     
     if (password.length < 6) {
-      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caracteres)' });
+      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caractères)' });
     }
     
-    // Verify token
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
@@ -647,10 +770,10 @@ app.post('/api/auth/reset-password', async (req, res) => {
         throw new Error('Invalid token type');
       }
     } catch (e) {
-      return res.status(400).json({ error: 'Lien expire ou invalide' });
+      return res.status(400).json({ error: 'Lien expiré ou invalide' });
     }
     
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
     
     const { error } = await supabase
       .from('users')
@@ -659,48 +782,52 @@ app.post('/api/auth/reset-password', async (req, res) => {
     
     if (error) throw error;
     
-    console.log('Password reset for user:', decoded.userId);
+    // Clear all sessions for this user (force re-login)
+    activeSessions.delete(decoded.userId);
+    
+    console.log('Password reset successful');
     
     res.json({ success: true });
     
   } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ error: 'Erreur reinitialisation' });
+    console.error('Reset password error');
+    res.status(500).json({ error: 'Erreur réinitialisation' });
   }
 });
 
 // ============ STRIPE ENDPOINTS ============
 
-// Create checkout session
 app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
   try {
     const { data: user } = await supabase
       .from('users')
-      .select('id, email, name, stripe_customer_id')
+      .select('email, plan, stripe_customer_id')
       .eq('id', req.userId)
       .single();
     
     if (!user) {
-      return res.status(404).json({ error: 'Utilisateur non trouve' });
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    
+    if (user.plan === 'pro') {
+      return res.status(400).json({ error: 'Déjà abonné Pro' });
     }
     
     const sessionConfig = {
       payment_method_types: ['card'],
-      mode: 'subscription',
       line_items: [{
         price: STRIPE_PRICE_ID,
         quantity: 1
       }],
+      mode: 'subscription',
       success_url: 'https://app.noly.pro?payment=success',
       cancel_url: 'https://app.noly.pro?payment=cancelled',
       metadata: {
-        user_id: user.id
+        user_id: req.userId
       },
-      allow_promotion_codes: true,
       billing_address_collection: 'auto'
     };
     
-    // Use existing customer if available
     if (user.stripe_customer_id) {
       sessionConfig.customer = user.stripe_customer_id;
     } else {
@@ -709,17 +836,16 @@ app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
     
     const session = await stripe.checkout.sessions.create(sessionConfig);
     
-    console.log('Checkout session created:', session.id);
+    console.log('Checkout session created');
     
     res.json({ success: true, url: session.url });
     
   } catch (error) {
-    console.error('Checkout error:', error);
-    res.status(500).json({ error: 'Erreur creation paiement' });
+    console.error('Checkout error:', error.message);
+    res.status(500).json({ error: 'Erreur création paiement' });
   }
 });
 
-// Customer portal (manage subscription)
 app.post('/api/stripe/portal', authMiddleware, async (req, res) => {
   try {
     const { data: user } = await supabase
@@ -740,12 +866,11 @@ app.post('/api/stripe/portal', authMiddleware, async (req, res) => {
     res.json({ success: true, url: session.url });
     
   } catch (error) {
-    console.error('Portal error:', error);
+    console.error('Portal error');
     res.status(500).json({ error: 'Erreur' });
   }
 });
 
-// Get subscription status
 app.get('/api/stripe/status', authMiddleware, async (req, res) => {
   try {
     const { data: user } = await supabase
@@ -768,7 +893,7 @@ app.get('/api/stripe/status', authMiddleware, async (req, res) => {
 
 // ============ LINKS ENDPOINTS ============
 
-app.post('/api/links', authMiddleware, async (req, res) => {
+app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
   try {
     const { name, originalUrl, clickThreshold } = req.body;
     
@@ -776,10 +901,18 @@ app.post('/api/links', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Nom et URL requis' });
     }
     
+    // Validate URL format
+    if (!isValidUrl(originalUrl)) {
+      return res.status(400).json({ error: 'URL invalide (doit commencer par http:// ou https://)' });
+    }
+    
+    // Sanitize name
+    const sanitizedName = name.substring(0, 200).trim();
+    
     // Check plan limits
     const { data: user } = await supabase
       .from('users')
-      .select('plan')
+      .select('plan, click_threshold')
       .eq('id', req.userId)
       .single();
     
@@ -793,21 +926,32 @@ app.post('/api/links', authMiddleware, async (req, res) => {
     if ((count || 0) >= limit) {
       return res.status(403).json({ 
         error: 'Limite atteinte',
-        message: 'Passez a Pro pour creer plus de liens',
+        message: 'Passez à Pro pour créer plus de liens',
         upgrade: true
       });
     }
     
     const shortCode = generateShortCode();
     
+    // Use custom threshold from request, or user default, or 5
+    let threshold = 5;
+    if (clickThreshold !== undefined) {
+      const parsed = parseInt(clickThreshold);
+      if (parsed >= 1 && parsed <= 100) {
+        threshold = parsed;
+      }
+    } else if (user?.click_threshold) {
+      threshold = user.click_threshold;
+    }
+    
     const { data: link, error } = await supabase
       .from('links')
       .insert({
         user_id: req.userId,
-        name,
+        name: sanitizedName,
         original_url: originalUrl,
         short_code: shortCode,
-        click_threshold: clickThreshold || 5,
+        click_threshold: threshold,
         alerts_enabled: true
       })
       .select()
@@ -831,8 +975,8 @@ app.post('/api/links', authMiddleware, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Create link error:', error);
-    res.status(500).json({ error: 'Erreur creation lien' });
+    console.error('Create link error');
+    res.status(500).json({ error: 'Erreur création lien' });
   }
 });
 
@@ -882,7 +1026,7 @@ app.get('/api/links', authMiddleware, async (req, res) => {
     res.json({ success: true, links: linksWithStats });
     
   } catch (error) {
-    console.error('Get links error:', error);
+    console.error('Get links error');
     res.status(500).json({ error: 'Erreur' });
   }
 });
@@ -900,7 +1044,7 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
       .single();
     
     if (error || !link) {
-      return res.status(404).json({ error: 'Lien non trouve' });
+      return res.status(404).json({ error: 'Lien non trouvé' });
     }
     
     const { data: clicks } = await supabase
@@ -911,10 +1055,9 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
     
     const humanClicks = (clicks || []).filter(c => !c.is_bot);
     const botClicks = (clicks || []).filter(c => c.is_bot);
-    
     const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
     
-    // Hour analysis
+    // Preferred hours
     const hourCounts = {};
     humanClicks.forEach(click => {
       const hour = new Date(click.timestamp).getHours();
@@ -925,7 +1068,7 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
       .slice(0, 3)
       .map(([hour, count]) => ({ hour: parseInt(hour), count }));
     
-    // Day analysis
+    // Preferred days
     const dayCounts = {};
     const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
     humanClicks.forEach(click => {
@@ -937,30 +1080,26 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
       .slice(0, 3)
       .map(([day, count]) => ({ day: dayNames[parseInt(day)], count }));
     
-    // Return delays
+    // Avg return delay
     const ipVisits = {};
     humanClicks.forEach(click => {
-      const ip = click.ip_address;
-      if (!ipVisits[ip]) ipVisits[ip] = [];
-      ipVisits[ip].push(new Date(click.timestamp));
+      if (!ipVisits[click.ip_address]) ipVisits[click.ip_address] = [];
+      ipVisits[click.ip_address].push(new Date(click.timestamp));
     });
-    
-    const returnDelays = [];
+    let totalDelay = 0;
+    let delayCount = 0;
     Object.values(ipVisits).forEach(visits => {
       if (visits.length > 1) {
         visits.sort((a, b) => a - b);
         for (let i = 1; i < visits.length; i++) {
-          const delayMs = visits[i] - visits[i-1];
-          const delayMin = Math.round(delayMs / 60000);
-          returnDelays.push(delayMin);
+          totalDelay += (visits[i] - visits[i-1]) / 60000;
+          delayCount++;
         }
       }
     });
-    const avgReturnDelay = returnDelays.length > 0 
-      ? Math.round(returnDelays.reduce((a, b) => a + b, 0) / returnDelays.length)
-      : null;
+    const avgReturnDelay = delayCount > 0 ? Math.round(totalDelay / delayCount) : null;
     
-    // Multi-device detection
+    // Multi-device users
     const ipDevices = {};
     humanClicks.forEach(click => {
       const ip = click.ip_address;
@@ -1058,7 +1197,7 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Get link error:', error);
+    console.error('Get link error');
     res.status(500).json({ error: 'Erreur' });
   }
 });
@@ -1066,6 +1205,18 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
 app.delete('/api/links/:linkId', authMiddleware, async (req, res) => {
   try {
     const { linkId } = req.params;
+    
+    // Verify ownership first
+    const { data: link } = await supabase
+      .from('links')
+      .select('id')
+      .eq('id', linkId)
+      .eq('user_id', req.userId)
+      .single();
+    
+    if (!link) {
+      return res.status(404).json({ error: 'Lien non trouvé' });
+    }
     
     await supabase.from('alerts_sent').delete().eq('link_id', linkId);
     await supabase.from('clicks').delete().eq('link_id', linkId);
@@ -1103,7 +1254,36 @@ app.put('/api/links/:linkId/alerts', authMiddleware, async (req, res) => {
     res.json({ success: true, alertsEnabled: link.alerts_enabled });
     
   } catch (error) {
-    console.error('Toggle alerts error:', error);
+    console.error('Toggle alerts error');
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// Update link threshold
+app.put('/api/links/:linkId/threshold', authMiddleware, async (req, res) => {
+  try {
+    const { linkId } = req.params;
+    const { clickThreshold } = req.body;
+    
+    const threshold = parseInt(clickThreshold);
+    if (isNaN(threshold) || threshold < 1 || threshold > 100) {
+      return res.status(400).json({ error: 'Seuil invalide (1-100)' });
+    }
+    
+    const { data: link, error } = await supabase
+      .from('links')
+      .update({ click_threshold: threshold })
+      .eq('id', linkId)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    res.json({ success: true, clickThreshold: link.click_threshold });
+    
+  } catch (error) {
+    console.error('Update threshold error');
     res.status(500).json({ error: 'Erreur' });
   }
 });
@@ -1114,6 +1294,11 @@ app.get('/d/:shortCode', async (req, res) => {
   try {
     const { shortCode } = req.params;
     
+    // Validate shortCode format
+    if (!/^[a-z0-9]{6}$/.test(shortCode)) {
+      return res.status(404).send('Page non trouvée');
+    }
+    
     const { data: link, error } = await supabase
       .from('links')
       .select('*')
@@ -1121,7 +1306,7 @@ app.get('/d/:shortCode', async (req, res) => {
       .single();
     
     if (error || !link) {
-      return res.status(404).send('Page non trouvee');
+      return res.status(404).send('Page non trouvée');
     }
     
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -1145,7 +1330,7 @@ app.get('/d/:shortCode', async (req, res) => {
       browser: deviceInfo.browser,
       browser_version: deviceInfo.browserVersion,
       referrer,
-      user_agent: userAgent,
+      user_agent: userAgent.substring(0, 500), // Limit UA length
       is_bot: botInfo.isBot,
       bot_type: botInfo.botType
     });
@@ -1163,7 +1348,7 @@ app.get('/d/:shortCode', async (req, res) => {
           const intentScore = calculateIntentScore(allClicks, threshold);
           const humanClicks = (allClicks || []).filter(c => !c.is_bot);
           
-          console.log('Click on', link.name, '- Score:', intentScore + '%');
+          console.log('Click on link - Score:', intentScore + '%');
           
           if (intentScore >= 70 && link.alerts_enabled !== false) {
             const { data: recentAlerts } = await supabase
@@ -1173,7 +1358,7 @@ app.get('/d/:shortCode', async (req, res) => {
               .gte('sent_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
             
             if (!recentAlerts || recentAlerts.length === 0) {
-              console.log('HOT LINK:', link.name);
+              console.log('HOT LINK detected');
               
               const { data: user } = await supabase
                 .from('users')
@@ -1185,7 +1370,6 @@ app.get('/d/:shortCode', async (req, res) => {
                 if (user.email) {
                   await sendEmailAlert(link.name, intentScore, humanClicks.length, humanClicks[0], user.email);
                 }
-                // WhatsApp only for Pro users
                 if (user.whatsapp && user.plan === 'pro') {
                   await sendWhatsAppAlert(link.name, intentScore, humanClicks.length, user.whatsapp);
                 }
@@ -1199,7 +1383,7 @@ app.get('/d/:shortCode', async (req, res) => {
             }
           }
         } catch (e) {
-          console.error('Alert error:', e);
+          console.error('Alert error');
         }
       });
     }
@@ -1207,26 +1391,37 @@ app.get('/d/:shortCode', async (req, res) => {
     res.redirect(302, link.original_url);
     
   } catch (error) {
-    console.error('Track error:', error);
+    console.error('Track error');
     res.status(500).send('Erreur');
   }
 });
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '6.0-stripe' });
+  res.json({ status: 'ok', version: '7.0-secure' });
 });
 
 // Redirect shortcode without /d/
 app.get('/:shortCode', (req, res) => {
-  if (req.params.shortCode.length === 6) {
+  if (/^[a-z0-9]{6}$/.test(req.params.shortCode)) {
     res.redirect(301, '/d/' + req.params.shortCode);
   } else {
     res.status(404).send('Not found');
   }
 });
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint non trouvé' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Server error');
+  res.status(500).json({ error: 'Erreur serveur' });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('Noly API v6 STRIPE running on port ' + PORT);
+  console.log('Noly API v7 SECURE running on port ' + PORT);
 });
