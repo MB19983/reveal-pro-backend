@@ -1345,20 +1345,24 @@ app.get('/d/:shortCode', async (req, res) => {
             .eq('link_id', link.id);
           
           const threshold = link.click_threshold || 5;
-          const intentScore = calculateIntentScore(allClicks, threshold);
           const humanClicks = (allClicks || []).filter(c => !c.is_bot);
+          const totalHumanClicks = humanClicks.length;
           
-          console.log('Click on link - Score:', intentScore + '%');
+          console.log('Click on link - Total:', totalHumanClicks, '- Threshold:', threshold);
           
-          if (intentScore >= 70 && link.alerts_enabled !== false) {
-            const { data: recentAlerts } = await supabase
+          // Check if we've hit a threshold multiple (1, 2, 3... x threshold)
+          if (totalHumanClicks > 0 && totalHumanClicks % threshold === 0 && link.alerts_enabled !== false) {
+            
+            // Check if we already sent an alert for this exact click count
+            const { data: existingAlert } = await supabase
               .from('alerts_sent')
               .select('id')
               .eq('link_id', link.id)
-              .gte('sent_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+              .eq('click_count', totalHumanClicks)
+              .single();
             
-            if (!recentAlerts || recentAlerts.length === 0) {
-              console.log('HOT LINK detected');
+            if (!existingAlert) {
+              console.log('ALERT TRIGGERED at', totalHumanClicks, 'clicks');
               
               const { data: user } = await supabase
                 .from('users')
@@ -1367,17 +1371,20 @@ app.get('/d/:shortCode', async (req, res) => {
                 .single();
               
               if (user) {
+                const intentScore = calculateIntentScore(allClicks, threshold);
+                
                 if (user.email) {
-                  await sendEmailAlert(link.name, intentScore, humanClicks.length, humanClicks[0], user.email);
+                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
                 }
                 if (user.whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, humanClicks.length, user.whatsapp);
+                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp);
                 }
                 
                 await supabase.from('alerts_sent').insert({
                   user_id: link.user_id,
                   link_id: link.id,
-                  intent_score: intentScore
+                  intent_score: intentScore,
+                  click_count: totalHumanClicks
                 });
               }
             }
