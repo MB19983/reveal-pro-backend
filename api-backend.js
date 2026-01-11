@@ -908,7 +908,7 @@ app.get('/api/stripe/status', authMiddleware, async (req, res) => {
 
 app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
   try {
-    const { name, originalUrl, clickThreshold } = req.body;
+    const { name, originalUrl, clickThreshold, displayText } = req.body;
     
     if (!name || !originalUrl) {
       return res.status(400).json({ error: 'Nom et URL requis' });
@@ -919,8 +919,9 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
       return res.status(400).json({ error: 'URL invalide (doit commencer par http:// ou https://)' });
     }
     
-    // Sanitize name
+    // Sanitize name and displayText
     const sanitizedName = name.substring(0, 200).trim();
+    const sanitizedDisplayText = displayText ? displayText.substring(0, 200).trim() : null;
     
     // Check plan limits
     const { data: user } = await supabase
@@ -965,6 +966,7 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
         original_url: originalUrl,
         short_code: shortCode,
         click_threshold: threshold,
+        display_text: sanitizedDisplayText,
         alerts_enabled: true
       })
       .select()
@@ -983,6 +985,7 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
         shortCode: link.short_code,
         trackableUrl: baseUrl + '/d/' + shortCode,
         clickThreshold: link.click_threshold,
+        displayText: link.display_text,
         createdAt: link.created_at
       }
     });
