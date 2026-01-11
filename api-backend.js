@@ -799,6 +799,17 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
 
 app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
   try {
+    // Check Stripe configuration
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('STRIPE_SECRET_KEY not configured');
+      return res.status(500).json({ error: 'Configuration Stripe manquante' });
+    }
+    
+    if (!STRIPE_PRICE_ID) {
+      console.error('STRIPE_PRICE_ID not configured');
+      return res.status(500).json({ error: 'Prix Stripe non configuré' });
+    }
+    
     const { data: user } = await supabase
       .from('users')
       .select('email, plan, stripe_customer_id')
@@ -812,6 +823,8 @@ app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
     if (user.plan === 'pro') {
       return res.status(400).json({ error: 'Déjà abonné Pro' });
     }
+    
+    console.log('Creating checkout for:', user.email, 'Price:', STRIPE_PRICE_ID);
     
     const sessionConfig = {
       payment_method_types: ['card'],
@@ -836,13 +849,13 @@ app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
     
     const session = await stripe.checkout.sessions.create(sessionConfig);
     
-    console.log('Checkout session created');
+    console.log('Checkout session created:', session.id);
     
     res.json({ success: true, url: session.url });
     
   } catch (error) {
     console.error('Checkout error:', error.message);
-    res.status(500).json({ error: 'Erreur création paiement' });
+    res.status(500).json({ error: 'Erreur paiement: ' + error.message });
   }
 });
 
