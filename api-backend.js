@@ -275,13 +275,10 @@ function extractSlugFromUrl(url) {
   try {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname;
+    const hostname = urlObj.hostname;
     
     // Get all parts of the path
     const parts = pathname.split('/').filter(p => p.length > 0);
-    
-    if (parts.length === 0) {
-      return null;
-    }
     
     // Find the best descriptive part (not just IDs or short codes)
     let bestSlug = null;
@@ -323,6 +320,26 @@ function extractSlugFromUrl(url) {
       if (score > bestScore) {
         bestScore = score;
         bestSlug = cleaned;
+      }
+    }
+    
+    // If no good slug found from path, use the domain name
+    if (!bestSlug) {
+      // Extract domain name without TLD
+      // e.g., "updatebase.io" -> "updatebase"
+      // e.g., "www.clickmediax.com" -> "clickmediax"
+      let domainSlug = hostname
+        .toLowerCase()
+        .replace(/^www\./, '') // Remove www.
+        .split('.')[0]; // Get first part (before TLD)
+      
+      // Clean it
+      domainSlug = domainSlug
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
+      if (domainSlug.length >= 3) {
+        bestSlug = domainSlug;
       }
     }
     
