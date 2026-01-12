@@ -270,6 +270,81 @@ function generateShortCode() {
   return code;
 }
 
+// ============ Extract slug from URL ============
+function extractSlugFromUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    
+    // Get the last meaningful part of the path
+    const parts = pathname.split('/').filter(p => p.length > 0);
+    
+    if (parts.length === 0) {
+      return null;
+    }
+    
+    // Get the last part (usually the most descriptive)
+    let slug = parts[parts.length - 1];
+    
+    // Remove file extensions
+    slug = slug.replace(/\.(html|php|pdf|htm|aspx)$/i, '');
+    
+    // Decode URL encoding
+    slug = decodeURIComponent(slug);
+    
+    // Convert to lowercase and replace spaces/special chars with dashes
+    slug = slug
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/[^a-z0-9]+/g, '-')     // Replace non-alphanumeric with dash
+      .replace(/^-+|-+$/g, '')          // Remove leading/trailing dashes
+      .substring(0, 60);                // Limit length
+    
+    // If slug is too short or just numbers, return null
+    if (slug.length < 3 || /^\d+$/.test(slug)) {
+      return null;
+    }
+    
+    return slug;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ============ Generate unique slug ============
+async function generateUniqueSlug(baseSlug) {
+  // Check if baseSlug exists
+  const { data: existing } = await supabase
+    .from('links')
+    .select('id')
+    .eq('short_code', baseSlug)
+    .single();
+  
+  if (!existing) {
+    return baseSlug;
+  }
+  
+  // Add random suffix if exists
+  for (let i = 0; i < 10; i++) {
+    const suffix = Math.random().toString(36).substring(2, 5);
+    const newSlug = `${baseSlug}-${suffix}`;
+    
+    const { data: check } = await supabase
+      .from('links')
+      .select('id')
+      .eq('short_code', newSlug)
+      .single();
+    
+    if (!check) {
+      return newSlug;
+    }
+  }
+  
+  // Fallback to random code
+  return generateShortCode();
+}
+
 // ============ SECURITY: URL Validation ============
 function isValidUrl(string) {
   try {
@@ -908,7 +983,7 @@ app.get('/api/stripe/status', authMiddleware, async (req, res) => {
 
 app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
   try {
-    const { name, originalUrl, clickThreshold, displayText } = req.body;
+    const { name, originalUrl, clickThreshold } = req.body;
     
     if (!name || !originalUrl) {
       return res.status(400).json({ error: 'Nom et URL requis' });
@@ -919,9 +994,8 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
       return res.status(400).json({ error: 'URL invalide (doit commencer par http:// ou https://)' });
     }
     
-    // Sanitize name and displayText
+    // Sanitize name
     const sanitizedName = name.substring(0, 200).trim();
-    const sanitizedDisplayText = displayText ? displayText.substring(0, 200).trim() : null;
     
     // Check plan limits
     const { data: user } = await supabase
@@ -945,7 +1019,15 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
       });
     }
     
-    const shortCode = generateShortCode();
+    // Generate slug from URL or fallback to random code
+    let shortCode;
+    const extractedSlug = extractSlugFromUrl(originalUrl);
+    
+    if (extractedSlug) {
+      shortCode = await generateUniqueSlug(extractedSlug);
+    } else {
+      shortCode = generateShortCode();
+    }
     
     // Use custom threshold from request, or user default, or 5
     let threshold = 5;
@@ -966,7 +1048,6 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
         original_url: originalUrl,
         short_code: shortCode,
         click_threshold: threshold,
-        display_text: sanitizedDisplayText,
         alerts_enabled: true
       })
       .select()
@@ -974,7 +1055,7 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
     
     if (error) throw error;
     
-    const baseUrl = process.env.BASE_URL || 'https://v.noly.pro';
+    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
     
     res.json({
       success: true,
@@ -983,9 +1064,8 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
         name: link.name,
         originalUrl: link.original_url,
         shortCode: link.short_code,
-        trackableUrl: baseUrl + '/d/' + shortCode,
+        trackableUrl: baseUrl + '/' + shortCode,
         clickThreshold: link.click_threshold,
-        displayText: link.display_text,
         createdAt: link.created_at
       }
     });
@@ -1006,7 +1086,7 @@ app.get('/api/links', authMiddleware, async (req, res) => {
     
     if (error) throw error;
     
-    const baseUrl = process.env.BASE_URL || 'https://v.noly.pro';
+    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
     
     const linksWithStats = await Promise.all((links || []).map(async (link) => {
       const { data: clicks } = await supabase
@@ -1024,7 +1104,7 @@ app.get('/api/links', authMiddleware, async (req, res) => {
         name: link.name,
         originalUrl: link.original_url,
         shortCode: link.short_code,
-        trackableUrl: baseUrl + '/d/' + link.short_code,
+        trackableUrl: baseUrl + '/' + link.short_code,
         clickThreshold: link.click_threshold || 5,
         alertsEnabled: link.alerts_enabled !== false,
         createdAt: link.created_at,
@@ -1180,7 +1260,7 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
       .sort((a, b) => b[1] - a[1])
       .map(([source, count]) => ({ source, count }));
     
-    const baseUrl = process.env.BASE_URL || 'https://v.noly.pro';
+    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
     
     res.json({
       success: true,
@@ -1189,7 +1269,7 @@ app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
         name: link.name,
         originalUrl: link.original_url,
         shortCode: link.short_code,
-        trackableUrl: baseUrl + '/d/' + link.short_code,
+        trackableUrl: baseUrl + '/' + link.short_code,
         clickThreshold: link.click_threshold || 5,
         alertsEnabled: link.alerts_enabled !== false,
         createdAt: link.created_at
@@ -1306,6 +1386,126 @@ app.put('/api/links/:linkId/threshold', authMiddleware, async (req, res) => {
 
 // ============ TRACKING ENDPOINT ============
 
+// New short format: noly.pro/slug
+app.get('/:shortCode', async (req, res) => {
+  try {
+    const { shortCode } = req.params;
+    
+    // Skip API routes and static files
+    if (shortCode === 'api' || shortCode === 'health' || shortCode.includes('.')) {
+      return res.status(404).send('Not found');
+    }
+    
+    // Allow alphanumeric and dashes, 3-60 chars
+    if (!/^[a-z0-9-]{3,60}$/.test(shortCode)) {
+      return res.status(404).send('Page non trouvée');
+    }
+    
+    const { data: link, error } = await supabase
+      .from('links')
+      .select('*')
+      .eq('short_code', shortCode)
+      .single();
+    
+    if (error || !link) {
+      return res.status(404).send('Page non trouvée');
+    }
+    
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    const userAgent = req.headers['user-agent'] || '';
+    const referrer = req.headers['referer'] || 'direct';
+    
+    const deviceInfo = extractDeviceInfo(userAgent);
+    const geoInfo = getGeolocation(ip);
+    const botInfo = detectBot(userAgent);
+    
+    // Record click
+    await supabase.from('clicks').insert({
+      link_id: link.id,
+      ip_address: ip,
+      country: geoInfo.country,
+      city: geoInfo.city,
+      device_type: deviceInfo.deviceType,
+      device_model: deviceInfo.deviceModel,
+      os: deviceInfo.os,
+      os_version: deviceInfo.osVersion,
+      browser: deviceInfo.browser,
+      browser_version: deviceInfo.browserVersion,
+      referrer,
+      user_agent: userAgent.substring(0, 500),
+      is_bot: botInfo.isBot,
+      bot_type: botInfo.botType
+    });
+    
+    // Auto-alert check (async)
+    if (!botInfo.isBot) {
+      setImmediate(async () => {
+        try {
+          const { data: allClicks } = await supabase
+            .from('clicks')
+            .select('*')
+            .eq('link_id', link.id);
+          
+          const threshold = link.click_threshold || 5;
+          const humanClicks = (allClicks || []).filter(c => !c.is_bot);
+          const totalHumanClicks = humanClicks.length;
+          
+          console.log('Click on link - Total:', totalHumanClicks, '- Threshold:', threshold);
+          
+          // Check if we've hit a threshold multiple (1, 2, 3... x threshold)
+          if (totalHumanClicks > 0 && totalHumanClicks % threshold === 0 && link.alerts_enabled !== false) {
+            
+            // Check if we already sent an alert for this exact click count
+            const { data: existingAlert } = await supabase
+              .from('alerts_sent')
+              .select('id')
+              .eq('link_id', link.id)
+              .eq('click_count', totalHumanClicks)
+              .single();
+            
+            if (!existingAlert) {
+              console.log('ALERT TRIGGERED at', totalHumanClicks, 'clicks');
+              
+              const { data: user } = await supabase
+                .from('users')
+                .select('email, whatsapp, plan')
+                .eq('id', link.user_id)
+                .single();
+              
+              if (user) {
+                const intentScore = calculateIntentScore(allClicks, threshold);
+                
+                if (user.email) {
+                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
+                }
+                if (user.whatsapp && user.plan === 'pro') {
+                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp);
+                }
+                
+                await supabase.from('alerts_sent').insert({
+                  user_id: link.user_id,
+                  link_id: link.id,
+                  intent_score: intentScore,
+                  click_count: totalHumanClicks
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Alert error');
+        }
+      });
+    }
+    
+    res.redirect(302, link.original_url);
+    
+  } catch (error) {
+    console.error('Track error');
+    res.status(500).send('Erreur');
+  }
+});
+
+// Legacy format: /d/shortcode (keep for backward compatibility)
 app.get('/d/:shortCode', async (req, res) => {
   try {
     const { shortCode } = req.params;
@@ -1421,16 +1621,7 @@ app.get('/d/:shortCode', async (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '7.0-secure' });
-});
-
-// Redirect shortcode without /d/
-app.get('/:shortCode', (req, res) => {
-  if (/^[a-z0-9]{6}$/.test(req.params.shortCode)) {
-    res.redirect(301, '/d/' + req.params.shortCode);
-  } else {
-    res.status(404).send('Not found');
-  }
+  res.json({ status: 'ok', version: '8.0-custom-slugs' });
 });
 
 // 404 handler
@@ -1446,5 +1637,5 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('Noly API v7 SECURE running on port ' + PORT);
+  console.log('Noly API v8 CUSTOM SLUGS running on port ' + PORT);
 });
