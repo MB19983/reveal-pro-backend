@@ -276,37 +276,62 @@ function extractSlugFromUrl(url) {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname;
     
-    // Get the last meaningful part of the path
+    // Get all parts of the path
     const parts = pathname.split('/').filter(p => p.length > 0);
     
     if (parts.length === 0) {
       return null;
     }
     
-    // Get the last part (usually the most descriptive)
-    let slug = parts[parts.length - 1];
+    // Find the best descriptive part (not just IDs or short codes)
+    let bestSlug = null;
+    let bestScore = 0;
     
-    // Remove file extensions
-    slug = slug.replace(/\.(html|php|pdf|htm|aspx)$/i, '');
-    
-    // Decode URL encoding
-    slug = decodeURIComponent(slug);
-    
-    // Convert to lowercase and replace spaces/special chars with dashes
-    slug = slug
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove accents
-      .replace(/[^a-z0-9]+/g, '-')     // Replace non-alphanumeric with dash
-      .replace(/^-+|-+$/g, '')          // Remove leading/trailing dashes
-      .substring(0, 60);                // Limit length
-    
-    // If slug is too short or just numbers, return null
-    if (slug.length < 3 || /^\d+$/.test(slug)) {
-      return null;
+    for (const part of parts) {
+      // Decode and clean the part
+      let cleaned = decodeURIComponent(part)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove accents
+        .replace(/\.(html|php|pdf|htm|aspx)$/i, '') // Remove extensions
+        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with dash
+        .replace(/^-+|-+$/g, ''); // Remove leading/trailing dashes
+      
+      // Skip if too short
+      if (cleaned.length < 4) continue;
+      
+      // Skip if mostly numbers (like IDs: r1921754, 12345, etc.)
+      const letterCount = (cleaned.match(/[a-z]/g) || []).length;
+      const numberCount = (cleaned.match(/[0-9]/g) || []).length;
+      
+      if (numberCount > letterCount) continue;
+      
+      // Score based on length and descriptiveness
+      let score = cleaned.length;
+      
+      // Bonus for having multiple words (dashes)
+      const dashCount = (cleaned.match(/-/g) || []).length;
+      score += dashCount * 5;
+      
+      // Bonus for descriptive keywords
+      if (cleaned.includes('appartement') || cleaned.includes('maison') || 
+          cleaned.includes('vente') || cleaned.includes('location') ||
+          cleaned.includes('annonce') || cleaned.includes('offre')) {
+        score += 10;
+      }
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestSlug = cleaned;
+      }
     }
     
-    return slug;
+    // Limit length
+    if (bestSlug) {
+      bestSlug = bestSlug.substring(0, 60);
+    }
+    
+    return bestSlug;
   } catch (e) {
     return null;
   }
