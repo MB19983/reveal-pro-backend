@@ -45,7 +45,7 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 login attempts per 15 min per IP
+  max: 50, // 50 login attempts per 15 min per IP
   message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
   standardHeaders: true,
   legacyHeaders: false
@@ -59,25 +59,9 @@ const createLinkLimiter = rateLimit({
 
 app.use(generalLimiter);
 
-// ============ SECURITY: CORS - Restricted Origins ============
-const allowedOrigins = [
-  'https://noly.pro',
-  'https://www.noly.pro',
-  'https://app.noly.pro',
-  'http://localhost:3000',
-  'http://localhost:5500',
-  'http://127.0.0.1:5500'
-];
-
+// ============ SECURITY: CORS - Allow all origins for now ============
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS not allowed'), false);
-  },
+  origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'stripe-signature'],
   credentials: true
