@@ -1043,19 +1043,22 @@ app.get('/api/stripe/status', authMiddleware, async (req, res) => {
 
 app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
   try {
-    const { name, originalUrl, clickThreshold } = req.body;
-    
-    if (!name || !originalUrl) {
-      return res.status(400).json({ error: 'Nom et URL requis' });
+    // Accept both camelCase and snake_case for compatibility
+    const name = req.body.name;
+    const originalUrl = req.body.originalUrl || req.body.original_url;
+    const clickThreshold = req.body.clickThreshold || req.body.click_threshold;
+
+    if (!originalUrl) {
+      return res.status(400).json({ error: 'URL requis' });
     }
-    
+
     // Validate URL format
     if (!isValidUrl(originalUrl)) {
       return res.status(400).json({ error: 'URL invalide (doit commencer par http:// ou https://)' });
     }
     
-    // Sanitize name
-    const sanitizedName = name.substring(0, 200).trim();
+    // Sanitize name - use URL domain as default if no name
+    const sanitizedName = (name || 'Untitled Link').substring(0, 200).trim();
     
     // Check plan limits
     const { data: user } = await supabase
@@ -1119,14 +1122,30 @@ app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
     
     res.json({
       success: true,
+      // Return both formats for compatibility
+      id: link.id,
+      name: link.name,
+      original_url: link.original_url,
+      originalUrl: link.original_url,
+      short_code: link.short_code,
+      shortCode: link.short_code,
+      trackableUrl: baseUrl + '/' + shortCode,
+      click_threshold: link.click_threshold,
+      clickThreshold: link.click_threshold,
+      created_at: link.created_at,
+      createdAt: link.created_at,
       link: {
         id: link.id,
         name: link.name,
         originalUrl: link.original_url,
+        original_url: link.original_url,
         shortCode: link.short_code,
+        short_code: link.short_code,
         trackableUrl: baseUrl + '/' + shortCode,
         clickThreshold: link.click_threshold,
-        createdAt: link.created_at
+        click_threshold: link.click_threshold,
+        createdAt: link.created_at,
+        created_at: link.created_at
       }
     });
     
@@ -1154,24 +1173,42 @@ app.get('/api/links', authMiddleware, async (req, res) => {
         .select('*')
         .eq('link_id', link.id)
         .order('timestamp', { ascending: false });
-      
+
       const humanClicks = (clicks || []).filter(c => !c.is_bot);
       const botClicks = (clicks || []).filter(c => c.is_bot);
       const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
-      
+      const intentScore = calculateIntentScore(clicks, link.click_threshold || 5);
+
+      // Return both camelCase and snake_case for frontend compatibility
       return {
         id: link.id,
         name: link.name,
+        // Both formats
         originalUrl: link.original_url,
+        original_url: link.original_url,
         shortCode: link.short_code,
+        short_code: link.short_code,
         trackableUrl: baseUrl + '/' + link.short_code,
         clickThreshold: link.click_threshold || 5,
+        click_threshold: link.click_threshold || 5,
         alertsEnabled: link.alerts_enabled !== false,
+        alerts_enabled: link.alerts_enabled !== false,
         createdAt: link.created_at,
+        created_at: link.created_at,
+        // Flat stats for easy access
+        clicks: humanClicks.length,
+        totalClicks: humanClicks.length,
+        botClicks: botClicks.length,
+        intentScore: intentScore,
+        intent_score: intentScore,
+        uniqueVisitors: new Set(humanClicks.map(c => c.ip_address)).size,
+        lastClickAt: lastClick ? lastClick.timestamp : null,
+        lastClickFormatted: lastClick ? formatDateFR(lastClick.timestamp) : null,
+        // Nested stats object too
         stats: {
           totalClicks: humanClicks.length,
           botClicks: botClicks.length,
-          intentScore: calculateIntentScore(clicks, link.click_threshold || 5),
+          intentScore: intentScore,
           uniqueVisitors: new Set(humanClicks.map(c => c.ip_address)).size,
           lastClickAt: lastClick ? lastClick.timestamp : null,
           lastClickFormatted: lastClick ? formatDateFR(lastClick.timestamp) : null
