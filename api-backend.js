@@ -1,5 +1,12 @@
-// Noly Pro - Backend API SECURED
-// Version 7.0 - Production Ready with Security Fixes
+// ============================================================
+// NOLY V2 - BACKEND API
+// Smart Link Pages + QR Codes + Enhanced Tracking
+// ============================================================
+// 
+// Stack: Node.js + Express + Supabase
+// Deploy: Render.com (free tier)
+//
+// ============================================================
 
 const express = require('express');
 const cors = require('cors');
@@ -10,209 +17,27 @@ const { Resend } = require('resend');
 const twilio = require('twilio');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const Stripe = require('stripe');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
 
 const app = express();
+app.use(cors());
+app.use(express.json());
 
-// ============ SECURITY: Validate required env vars ============
+// ============================================================
+// CONFIGURATION
+// ============================================================
+
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
+const BASE_URL = process.env.BASE_URL || 'https://noly.pro';
+
+// Validate JWT_SECRET
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error('FATAL: JWT_SECRET must be set and at least 32 characters');
   process.exit(1);
 }
 
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-  console.error('FATAL: SUPABASE_URL and SUPABASE_KEY must be set');
-  process.exit(1);
-}
-
-// ============ SECURITY: Helmet for security headers ============
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable for API
-  crossOriginEmbedderPolicy: false
-}));
-
-// ============ SECURITY: Rate Limiting ============
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per 15 min per IP
-  message: { error: 'Trop de requêtes, réessayez plus tard' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 login attempts per 15 min per IP
-  message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const createLinkLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // 20 link creations per hour
-  message: { error: 'Limite de création atteinte, réessayez plus tard' }
-});
-
-app.use(generalLimiter);
-
-// ============ SECURITY: CORS - Restricted Origins ============
-const allowedOrigins = [
-  'https://noly.pro',
-  'https://www.noly.pro',
-  'https://app.noly.pro',
-  'http://localhost:3000',
-  'http://localhost:5500',
-  'http://127.0.0.1:5500'
-];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS not allowed'), false);
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'stripe-signature'],
-  credentials: true
-}));
-
-// ============ Stripe Configuration - PRODUCTION ============
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SmsVs3TJRCZE3zmCZIYO3N48MRGrvSCXLqwLrQc7RhUn7tEXBGrDFq1vtTbBVMETP3v1E1cFVuc7xmgzvcvurnE00pUY9iHpG';
-const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
-
-// Stripe webhook needs raw body
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    if (STRIPE_WEBHOOK_SECRET) {
-      event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
-    } else {
-      event = JSON.parse(req.body);
-    }
-  } catch (err) {
-    console.error('Webhook signature error:', err.message);
-    return res.status(400).send('Webhook Error: ' + err.message);
-  }
-
-  console.log('Stripe webhook:', event.type);
-
-  try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        const userId = session.metadata.user_id;
-        const customerId = session.customer;
-        const subscriptionId = session.subscription;
-
-        console.log('Checkout completed for user:', userId);
-
-        await supabase
-          .from('users')
-          .update({
-            plan: 'pro',
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            subscription_status: 'active'
-          })
-          .eq('id', userId);
-
-        break;
-      }
-
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object;
-        const customerId = subscription.customer;
-        const status = subscription.status;
-
-        console.log('Subscription updated:', status);
-
-        const { data: user } = await supabase
-          .from('users')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (user) {
-          await supabase
-            .from('users')
-            .update({
-              subscription_status: status,
-              plan: status === 'active' ? 'pro' : 'free'
-            })
-            .eq('id', user.id);
-        }
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object;
-        const customerId = subscription.customer;
-
-        console.log('Subscription cancelled');
-
-        const { data: user } = await supabase
-          .from('users')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (user) {
-          await supabase
-            .from('users')
-            .update({
-              plan: 'free',
-              subscription_status: 'cancelled',
-              stripe_subscription_id: null
-            })
-            .eq('id', user.id);
-        }
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object;
-        const customerId = invoice.customer;
-
-        console.log('Payment failed for customer');
-
-        const { data: user } = await supabase
-          .from('users')
-          .select('id')
-          .eq('stripe_customer_id', customerId)
-          .single();
-
-        if (user) {
-          await supabase
-            .from('users')
-            .update({ subscription_status: 'past_due' })
-            .eq('id', user.id);
-        }
-        break;
-      }
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    console.error('Webhook processing error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
-// Now use JSON parser for other routes
-app.use(express.json({ limit: '1mb' }));
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize services
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN 
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
   : null;
@@ -222,187 +47,17 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
-// Plan limits
-const PLAN_LIMITS = {
-  free: 2,
-  pro: 999999
-};
+// ============================================================
+// UTILITY FUNCTIONS
+// ============================================================
 
-// ============ SECURITY: Session limits per email ============
-const MAX_SESSIONS_PER_USER = 3;
-const activeSessions = new Map(); // In production, use Redis
-
-function addSession(userId, token) {
-  if (!activeSessions.has(userId)) {
-    activeSessions.set(userId, []);
-  }
-  const sessions = activeSessions.get(userId);
-  sessions.push({ token, createdAt: Date.now() });
-  
-  // Keep only last MAX_SESSIONS_PER_USER sessions
-  if (sessions.length > MAX_SESSIONS_PER_USER) {
-    sessions.shift(); // Remove oldest session
-  }
-}
-
-function isSessionValid(userId, token) {
-  const sessions = activeSessions.get(userId);
-  if (!sessions) return true; // No sessions tracked yet, allow
-  return sessions.some(s => s.token === token);
-}
-
-function removeSession(userId, token) {
-  const sessions = activeSessions.get(userId);
-  if (sessions) {
-    const index = sessions.findIndex(s => s.token === token);
-    if (index > -1) sessions.splice(index, 1);
-  }
-}
-
-// ============ UTILITIES ============
-
-function generateShortCode() {
+function generateShortCode(length = 6) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let code = '';
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < length; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
-}
-
-// ============ Extract slug from URL ============
-function extractSlugFromUrl(url) {
-  try {
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname;
-    const hostname = urlObj.hostname;
-    
-    // Get all parts of the path
-    const parts = pathname.split('/').filter(p => p.length > 0);
-    
-    // Find the best descriptive part (not just IDs or short codes)
-    let bestSlug = null;
-    let bestScore = 0;
-    
-    for (const part of parts) {
-      // Decode and clean the part
-      let cleaned = decodeURIComponent(part)
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // Remove accents
-        .replace(/\.(html|php|pdf|htm|aspx)$/i, '') // Remove extensions
-        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with dash
-        .replace(/^-+|-+$/g, ''); // Remove leading/trailing dashes
-      
-      // Skip if too short
-      if (cleaned.length < 4) continue;
-      
-      // Skip if mostly numbers (like IDs: r1921754, 12345, etc.)
-      const letterCount = (cleaned.match(/[a-z]/g) || []).length;
-      const numberCount = (cleaned.match(/[0-9]/g) || []).length;
-      
-      if (numberCount > letterCount) continue;
-      
-      // Score based on length and descriptiveness
-      let score = cleaned.length;
-      
-      // Bonus for having multiple words (dashes)
-      const dashCount = (cleaned.match(/-/g) || []).length;
-      score += dashCount * 5;
-      
-      // Bonus for descriptive keywords
-      if (cleaned.includes('appartement') || cleaned.includes('maison') || 
-          cleaned.includes('vente') || cleaned.includes('location') ||
-          cleaned.includes('annonce') || cleaned.includes('offre')) {
-        score += 10;
-      }
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestSlug = cleaned;
-      }
-    }
-    
-    // If no good slug found from path, use the domain name
-    if (!bestSlug) {
-      // Extract domain name without TLD
-      // e.g., "updatebase.io" -> "updatebase"
-      // e.g., "www.clickmediax.com" -> "clickmediax"
-      let domainSlug = hostname
-        .toLowerCase()
-        .replace(/^www\./, '') // Remove www.
-        .split('.')[0]; // Get first part (before TLD)
-      
-      // Clean it
-      domainSlug = domainSlug
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      
-      if (domainSlug.length >= 3) {
-        bestSlug = domainSlug;
-      }
-    }
-    
-    // Limit length
-    if (bestSlug) {
-      bestSlug = bestSlug.substring(0, 60);
-    }
-    
-    return bestSlug;
-  } catch (e) {
-    return null;
-  }
-}
-
-// ============ Generate unique slug ============
-async function generateUniqueSlug(baseSlug) {
-  // Check if baseSlug exists
-  const { data: existing } = await supabase
-    .from('links')
-    .select('id')
-    .eq('short_code', baseSlug)
-    .single();
-  
-  if (!existing) {
-    return baseSlug;
-  }
-  
-  // Add random suffix if exists
-  for (let i = 0; i < 10; i++) {
-    const suffix = Math.random().toString(36).substring(2, 5);
-    const newSlug = `${baseSlug}-${suffix}`;
-    
-    const { data: check } = await supabase
-      .from('links')
-      .select('id')
-      .eq('short_code', newSlug)
-      .single();
-    
-    if (!check) {
-      return newSlug;
-    }
-  }
-  
-  // Fallback to random code
-  return generateShortCode();
-}
-
-// ============ SECURITY: URL Validation ============
-function isValidUrl(string) {
-  try {
-    const url = new URL(string);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch (_) {
-    return false;
-  }
-}
-
-// ============ SECURITY: Sanitize log output ============
-function sanitizeEmail(email) {
-  if (!email) return 'unknown';
-  const [local, domain] = email.split('@');
-  if (!domain) return '***';
-  return local.substring(0, 2) + '***@' + domain;
 }
 
 function extractDeviceInfo(userAgentString) {
@@ -458,1226 +113,1371 @@ function detectBot(userAgentString) {
   return { isBot: false, botType: null };
 }
 
-function formatDateFR(date) {
-  return new Date(date).toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+         req.headers['x-real-ip'] || 
+         req.connection?.remoteAddress || 
+         req.ip;
+}
+
+// ============================================================
+// AUTHENTICATION MIDDLEWARE
+// ============================================================
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
   });
 }
 
-function calculateIntentScore(clicks, threshold) {
-  threshold = threshold || 5;
-  if (!clicks || clicks.length === 0) return 0;
-  
-  const humanClicks = clicks.filter(c => !c.is_bot);
-  if (humanClicks.length === 0) return 0;
-  
-  const totalVisits = humanClicks.length;
-  const uniqueDevices = new Set(humanClicks.map(c => c.device_type)).size;
-  
-  let score = 0;
-  
-  const visitRatio = totalVisits / threshold;
-  if (visitRatio >= 1.2) score = 85;
-  else if (visitRatio >= 1) score = 70;
-  else if (visitRatio >= 0.8) score = 55;
-  else if (visitRatio >= 0.6) score = 40;
-  else if (visitRatio >= 0.4) score = 25;
-  else if (visitRatio >= 0.2) score = 15;
-  else score = 5;
-  
-  if (uniqueDevices > 1) score += 10;
-  
-  const uniqueIPs = new Set(humanClicks.map(c => c.ip_address)).size;
-  if (totalVisits > uniqueIPs) score += 5;
-  
-  return Math.min(score, 100);
-}
-
-// Send WhatsApp alert
-async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp) {
-  if (!twilioClient || !userWhatsapp) return false;
-  
+// Check if user has PRO plan
+async function requirePro(req, res, next) {
   try {
-    const message = 'ALERTE NOLY\n\n' +
-      'Lien: ' + linkName + '\n' +
-      'Visites: ' + clickCount + '\n' +
-      'Score: ' + intentScore + '%\n\n' +
-      'Ce contact est tres interesse!\n' +
-      'Contactez-le maintenant.';
-
-    let whatsappNumber = userWhatsapp.trim();
-    if (!whatsappNumber.startsWith('whatsapp:')) {
-      whatsappNumber = 'whatsapp:' + whatsappNumber;
+    const { data: user } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', req.user.id)
+      .single();
+      
+    if (!user || user.plan !== 'pro') {
+      return res.status(403).json({ error: 'This feature requires a PRO plan' });
     }
-
-    await twilioClient.messages.create({
-      body: message,
-      from: process.env.TWILIO_WHATSAPP_FROM,
-      to: whatsappNumber
-    });
-    
-    console.log('WhatsApp alert sent');
-    return true;
+    next();
   } catch (error) {
-    console.error('WhatsApp error:', error.message);
-    return false;
+    res.status(500).json({ error: 'Failed to verify plan' });
   }
 }
 
-// Send Email alert
-async function sendEmailAlert(linkName, intentScore, clickCount, latestClick, userEmail) {
-  if (!userEmail) return false;
+// ============================================================
+// EMAIL TEMPLATES (English)
+// ============================================================
+
+function getLinkAlertEmailHtml(linkName, clicks, deviceInfo, location, linkUrl) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+    <div style="background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%); border-radius: 20px; padding: 32px; border: 1px solid rgba(255,255,255,0.1);">
+      
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="font-size: 48px; margin-bottom: 8px;">🔔</div>
+        <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0;">Someone viewed your link!</h1>
+      </div>
+      
+      <div style="background: rgba(191, 90, 242, 0.1); border: 1px solid rgba(191, 90, 242, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <div style="color: #bf5af2; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Link Name</div>
+        <div style="color: #ffffff; font-size: 20px; font-weight: 600;">${linkName}</div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+        <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="color: #bf5af2; font-size: 28px; font-weight: 700;">${clicks}</div>
+          <div style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase;">Total Views</div>
+        </div>
+        <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="color: #ffffff; font-size: 18px; font-weight: 600;">${deviceInfo}</div>
+          <div style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase;">Device</div>
+        </div>
+      </div>
+      
+      <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+        <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 4px;">📍 Location</div>
+        <div style="color: #ffffff; font-size: 16px;">${location}</div>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${linkUrl}" style="display: inline-block; background: linear-gradient(135deg, #bf5af2 0%, #9945c7 100%); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-weight: 600; font-size: 16px;">View Dashboard →</a>
+      </div>
+      
+      <div style="text-align: center; margin-top: 24px;">
+        <p style="color: rgba(255,255,255,0.4); font-size: 13px; margin: 0;">This is the perfect moment to follow up!</p>
+      </div>
+      
+    </div>
+    
+    <div style="text-align: center; margin-top: 24px;">
+      <p style="color: rgba(255,255,255,0.3); font-size: 12px; margin: 0;">Sent by Noly • Link Tracking Made Simple</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+function getQrAlertEmailHtml(qrName, scans, deviceInfo, location) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+    <div style="background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%); border-radius: 20px; padding: 32px; border: 1px solid rgba(255,255,255,0.1);">
+      
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="font-size: 48px; margin-bottom: 8px;">📱</div>
+        <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0;">Someone scanned your QR code!</h1>
+      </div>
+      
+      <div style="background: rgba(48, 209, 88, 0.1); border: 1px solid rgba(48, 209, 88, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <div style="color: #30d158; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">QR Code Name</div>
+        <div style="color: #ffffff; font-size: 20px; font-weight: 600;">${qrName}</div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+        <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="color: #30d158; font-size: 28px; font-weight: 700;">${scans}</div>
+          <div style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase;">Total Scans</div>
+        </div>
+        <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="color: #ffffff; font-size: 18px; font-weight: 600;">${deviceInfo}</div>
+          <div style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase;">Device</div>
+        </div>
+      </div>
+      
+      <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+        <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 4px;">📍 Location</div>
+        <div style="color: #ffffff; font-size: 16px;">${location}</div>
+      </div>
+      
+      <div style="text-align: center;">
+        <p style="color: rgba(255,255,255,0.4); font-size: 13px; margin: 0;">Your QR code is getting attention!</p>
+      </div>
+      
+    </div>
+    
+    <div style="text-align: center; margin-top: 24px;">
+      <p style="color: rgba(255,255,255,0.3); font-size: 12px; margin: 0;">Sent by Noly • Link Tracking Made Simple</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+function getPageLinkAlertEmailHtml(pageName, linkTitle, clicks, deviceInfo, location) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #0a0a0b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+    <div style="background: linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%); border-radius: 20px; padding: 32px; border: 1px solid rgba(255,255,255,0.1);">
+      
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="font-size: 48px; margin-bottom: 8px;">📄</div>
+        <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0;">Someone clicked a link on your page!</h1>
+      </div>
+      
+      <div style="background: rgba(191, 90, 242, 0.1); border: 1px solid rgba(191, 90, 242, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 16px;">
+        <div style="color: #bf5af2; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Smart Page</div>
+        <div style="color: #ffffff; font-size: 20px; font-weight: 600;">${pageName}</div>
+      </div>
+      
+      <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+        <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 4px;">Link clicked</div>
+        <div style="color: #ffffff; font-size: 16px; font-weight: 600;">${linkTitle}</div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+        <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="color: #bf5af2; font-size: 28px; font-weight: 700;">${clicks}</div>
+          <div style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase;">Total Clicks</div>
+        </div>
+        <div style="background: #2c2c2e; border-radius: 12px; padding: 16px; text-align: center;">
+          <div style="color: #ffffff; font-size: 16px; font-weight: 600;">${deviceInfo}</div>
+          <div style="color: rgba(255,255,255,0.6); font-size: 12px; text-transform: uppercase;">Device</div>
+        </div>
+      </div>
+      
+      <div style="background: #2c2c2e; border-radius: 12px; padding: 16px;">
+        <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 4px;">📍 Location</div>
+        <div style="color: #ffffff; font-size: 16px;">${location}</div>
+      </div>
+      
+    </div>
+    
+    <div style="text-align: center; margin-top: 24px;">
+      <p style="color: rgba(255,255,255,0.3); font-size: 12px; margin: 0;">Sent by Noly • Link Tracking Made Simple</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+// ============================================================
+// NOTIFICATION FUNCTIONS
+// ============================================================
+
+async function sendEmailAlert(to, subject, html) {
+  if (!resend) {
+    console.log('Email alert (Resend not configured):', subject);
+    return;
+  }
   
   try {
     await resend.emails.send({
-      from: 'Noly <alerte@noly.pro>',
-      to: userEmail,
-      subject: 'Alerte : ' + linkName + ' - ' + intentScore + '% interet',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">🔥 Prospect Chaud !</h1>
-          </div>
-          <div style="background: #1a1a2e; padding: 30px; color: #e0e0e0; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #667eea; margin-top: 0;">${linkName}</h2>
-            <div style="display: flex; gap: 20px; margin: 20px 0;">
-              <div style="background: #252540; padding: 15px 25px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 28px; font-weight: bold; color: #667eea;">${clickCount}</div>
-                <div style="color: #888; font-size: 14px;">Visites</div>
-              </div>
-              <div style="background: #252540; padding: 15px 25px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 28px; font-weight: bold; color: #ff6b6b;">${intentScore}%</div>
-                <div style="color: #888; font-size: 14px;">Score</div>
-              </div>
-            </div>
-            <p style="background: #252540; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
-              <strong>Contactez ce prospect maintenant !</strong><br>
-              Son niveau d'intérêt est élevé.
-            </p>
-            <p style="color: #888; font-size: 12px; margin-top: 20px;">
-              Dernière visite: ${latestClick?.city || 'Inconnu'}, ${latestClick?.country || ''} - ${latestClick?.device_type || ''}
-            </p>
-          </div>
-        </div>
-      `
+      from: 'Noly <alerts@noly.pro>',
+      to: to,
+      subject: subject,
+      html: html
     });
-    
-    console.log('Email alert sent');
-    return true;
+    console.log('Email sent to:', to);
   } catch (error) {
-    console.error('Email error:', error.message);
-    return false;
+    console.error('Failed to send email:', error);
   }
 }
 
-// Auth middleware
-function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token requis' });
+async function sendWhatsAppAlert(to, message) {
+  if (!twilioClient || !process.env.TWILIO_WHATSAPP_FROM) {
+    console.log('WhatsApp alert (Twilio not configured):', message);
+    return;
   }
   
-  const token = authHeader.substring(7);
-  
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    req.token = token;
-    
-    // Check if session is still valid (not exceeded max sessions)
-    // Note: In production, validate against stored sessions
-    
-    next();
+    await twilioClient.messages.create({
+      body: message,
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+      to: `whatsapp:${to}`
+    });
+    console.log('WhatsApp sent to:', to);
   } catch (error) {
-    return res.status(401).json({ error: 'Token invalide ou expiré' });
+    console.error('Failed to send WhatsApp:', error);
   }
 }
 
-// ============ AUTH ENDPOINTS ============
+// ============================================================
+// AUTH ENDPOINTS
+// ============================================================
 
-app.post('/api/auth/register', authLimiter, async (req, res) => {
-  try {
-    const { email, password, name } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email et mot de passe requis' });
-    }
-    
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Format email invalide' });
-    }
-    
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caractères)' });
-    }
-    
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .single();
-    
-    if (existing) {
-      return res.status(400).json({ error: 'Cet email existe déjà' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(password, 12); // Increased from 10 to 12
-    
-    const { data: user, error } = await supabase
-      .from('users')
-      .insert({
-        email: normalizedEmail,
-        password: hashedPassword,
-        name: name || email.split('@')[0],
-        plan: 'free',
-        click_threshold: 5
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Register DB error');
-      throw error;
-    }
-    
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
-    addSession(user.id, token);
-    
-    console.log('User registered:', sanitizeEmail(user.email));
-    
-    res.json({ 
-      success: true, 
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        plan: user.plan
-      }
-    });
-    
-  } catch (error) {
-    console.error('Register error');
-    res.status(500).json({ error: 'Erreur inscription' });
-  }
-});
-
-app.post('/api/auth/login', authLimiter, async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email et mot de passe requis' });
-    }
-    
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', normalizedEmail)
-      .single();
-    
-    if (error || !user) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
-    }
-    
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
-    }
-    
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
-    addSession(user.id, token);
-    
-    console.log('User logged in:', sanitizeEmail(user.email));
-    
-    res.json({ 
-      success: true, 
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        plan: user.plan || 'free',
-        whatsapp: user.whatsapp,
-        click_threshold: user.click_threshold || 5,
-        subscription_status: user.subscription_status
-      }
-    });
-    
-  } catch (error) {
-    console.error('Login error');
-    res.status(500).json({ error: 'Erreur connexion' });
-  }
-});
-
-app.post('/api/auth/logout', authMiddleware, async (req, res) => {
-  try {
-    removeSession(req.userId, req.token);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur déconnexion' });
-  }
-});
-
-app.get('/api/auth/me', authMiddleware, async (req, res) => {
-  try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id')
-      .eq('id', req.userId)
-      .single();
-    
-    if (error || !user) {
-      return res.status(404).json({ error: 'Utilisateur non trouvé' });
-    }
-    
-    const { count } = await supabase
-      .from('links')
-      .select('id', { count: 'exact' })
-      .eq('user_id', req.userId);
-    
-    const limit = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
-    
-    res.json({ 
-      success: true, 
-      user: {
-        ...user,
-        linksCount: count || 0,
-        linksLimit: limit,
-        canCreateLink: (count || 0) < limit
-      }
-    });
-    
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur' });
-  }
-});
-
-app.put('/api/auth/settings', authMiddleware, async (req, res) => {
-  try {
-    const { name, whatsapp, click_threshold } = req.body;
-    
-    const { data: currentUser } = await supabase
-      .from('users')
-      .select('plan')
-      .eq('id', req.userId)
-      .single();
-    
-    const updates = {};
-    if (name !== undefined) updates.name = name.substring(0, 100); // Limit name length
-    
-    // Only Pro users can save WhatsApp
-    if (whatsapp !== undefined && currentUser?.plan === 'pro') {
-      updates.whatsapp = whatsapp;
-    }
-    
-    // Allow custom click threshold (1-100)
-    if (click_threshold !== undefined) {
-      const threshold = parseInt(click_threshold);
-      if (threshold >= 1 && threshold <= 100) {
-        updates.click_threshold = threshold;
-      }
-    }
-    
-    const { data: user, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status')
-      .single();
-    
-    if (error) throw error;
-    
-    res.json({ success: true, user });
-    
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur mise à jour' });
-  }
-});
-
-// Forgot password
-app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+// Request magic link
+app.post('/api/auth/request', async (req, res) => {
   try {
     const { email } = req.body;
     
     if (!email) {
-      return res.status(400).json({ error: 'Email requis' });
+      return res.status(400).json({ error: 'Email is required' });
     }
     
-    const { data: user } = await supabase
+    // Check if user exists, create if not
+    let { data: user } = await supabase
       .from('users')
-      .select('id, email, name')
-      .eq('email', email.toLowerCase().trim())
+      .select('*')
+      .eq('email', email.toLowerCase())
       .single();
-    
-    // Always return success to prevent email enumeration
+      
     if (!user) {
-      return res.json({ success: true });
+      const { data: newUser, error } = await supabase
+        .from('users')
+        .insert({ email: email.toLowerCase(), plan: 'free' })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      user = newUser;
     }
     
-    const resetToken = jwt.sign(
-      { userId: user.id, type: 'reset' },
+    // Generate magic link token
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
       JWT_SECRET,
-      { expiresIn: '1h' }
+      { expiresIn: '15m' }
     );
     
-    const resetUrl = 'https://app.noly.pro?reset=' + resetToken;
+    const magicLink = `${BASE_URL}/auth/verify?token=${token}`;
     
-    await resend.emails.send({
-      from: 'Noly <noreply@noly.pro>',
-      to: user.email,
-      subject: 'Réinitialisation de votre mot de passe Noly',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">Noly</h1>
+    // Send email
+    if (resend) {
+      await resend.emails.send({
+        from: 'Noly <login@noly.pro>',
+        to: email,
+        subject: 'Your login link for Noly',
+        html: `
+          <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
+            <h2>Login to Noly</h2>
+            <p>Click the button below to log in. This link expires in 15 minutes.</p>
+            <a href="${magicLink}" style="display: inline-block; background: #bf5af2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; margin: 20px 0;">Log in to Noly →</a>
+            <p style="color: #666; font-size: 12px;">If you didn't request this, ignore this email.</p>
           </div>
-          <div style="background: #1a1a2e; padding: 30px; color: #e0e0e0; border-radius: 0 0 10px 10px;">
-            <h2 style="color: #667eea; margin-top: 0;">Réinitialisation du mot de passe</h2>
-            <p>Bonjour ${user.name || ''},</p>
-            <p>Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous :</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block;">Réinitialiser mon mot de passe</a>
-            </div>
-            <p style="color: #888; font-size: 14px;">Ce lien expire dans 1 heure.</p>
-            <p style="color: #888; font-size: 14px;">Si vous n'avez pas fait cette demande, ignorez cet email.</p>
-          </div>
-        </div>
-      `
-    });
-    
-    console.log('Reset email sent');
-    
-    res.json({ success: true });
-    
-  } catch (error) {
-    console.error('Forgot password error');
-    res.status(500).json({ error: 'Erreur envoi email' });
-  }
-});
-
-// Reset password with token
-app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
-  try {
-    const { token, password } = req.body;
-    
-    if (!token || !password) {
-      return res.status(400).json({ error: 'Token et mot de passe requis' });
-    }
-    
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Mot de passe trop court (min 6 caractères)' });
-    }
-    
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-      if (decoded.type !== 'reset') {
-        throw new Error('Invalid token type');
-      }
-    } catch (e) {
-      return res.status(400).json({ error: 'Lien expiré ou invalide' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(password, 12);
-    
-    const { error } = await supabase
-      .from('users')
-      .update({ password: hashedPassword })
-      .eq('id', decoded.userId);
-    
-    if (error) throw error;
-    
-    // Clear all sessions for this user (force re-login)
-    activeSessions.delete(decoded.userId);
-    
-    console.log('Password reset successful');
-    
-    res.json({ success: true });
-    
-  } catch (error) {
-    console.error('Reset password error');
-    res.status(500).json({ error: 'Erreur réinitialisation' });
-  }
-});
-
-// ============ STRIPE ENDPOINTS ============
-
-app.post('/api/stripe/checkout', authMiddleware, async (req, res) => {
-  try {
-    // Check Stripe configuration
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error('STRIPE_SECRET_KEY not configured');
-      return res.status(500).json({ error: 'Configuration Stripe manquante' });
-    }
-    
-    if (!STRIPE_PRICE_ID) {
-      console.error('STRIPE_PRICE_ID not configured');
-      return res.status(500).json({ error: 'Prix Stripe non configuré' });
-    }
-    
-    const { data: user } = await supabase
-      .from('users')
-      .select('email, plan, stripe_customer_id')
-      .eq('id', req.userId)
-      .single();
-    
-    if (!user) {
-      return res.status(404).json({ error: 'Utilisateur non trouvé' });
-    }
-    
-    if (user.plan === 'pro') {
-      return res.status(400).json({ error: 'Déjà abonné Pro' });
-    }
-    
-    console.log('Creating checkout for:', user.email, 'Price:', STRIPE_PRICE_ID);
-    
-    const sessionConfig = {
-      payment_method_types: ['card'],
-      line_items: [{
-        price: STRIPE_PRICE_ID,
-        quantity: 1
-      }],
-      mode: 'subscription',
-      success_url: 'https://app.noly.pro?payment=success',
-      cancel_url: 'https://app.noly.pro?payment=cancelled',
-      metadata: {
-        user_id: req.userId
-      },
-      billing_address_collection: 'auto'
-    };
-    
-    if (user.stripe_customer_id) {
-      sessionConfig.customer = user.stripe_customer_id;
-    } else {
-      sessionConfig.customer_email = user.email;
-    }
-    
-    const session = await stripe.checkout.sessions.create(sessionConfig);
-    
-    console.log('Checkout session created:', session.id);
-    
-    res.json({ success: true, url: session.url });
-    
-  } catch (error) {
-    console.error('Checkout error:', error.message);
-    res.status(500).json({ error: 'Erreur paiement: ' + error.message });
-  }
-});
-
-app.post('/api/stripe/portal', authMiddleware, async (req, res) => {
-  try {
-    const { data: user } = await supabase
-      .from('users')
-      .select('stripe_customer_id')
-      .eq('id', req.userId)
-      .single();
-    
-    if (!user || !user.stripe_customer_id) {
-      return res.status(400).json({ error: 'Pas d\'abonnement actif' });
-    }
-    
-    const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripe_customer_id,
-      return_url: 'https://app.noly.pro'
-    });
-    
-    res.json({ success: true, url: session.url });
-    
-  } catch (error) {
-    console.error('Portal error');
-    res.status(500).json({ error: 'Erreur' });
-  }
-});
-
-app.get('/api/stripe/status', authMiddleware, async (req, res) => {
-  try {
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan, subscription_status, stripe_subscription_id')
-      .eq('id', req.userId)
-      .single();
-    
-    res.json({
-      success: true,
-      plan: user.plan || 'free',
-      status: user.subscription_status,
-      hasSubscription: !!user.stripe_subscription_id
-    });
-    
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur' });
-  }
-});
-
-// ============ LINKS ENDPOINTS ============
-
-app.post('/api/links', authMiddleware, createLinkLimiter, async (req, res) => {
-  try {
-    const { name, originalUrl, clickThreshold } = req.body;
-    
-    if (!name || !originalUrl) {
-      return res.status(400).json({ error: 'Nom et URL requis' });
-    }
-    
-    // Validate URL format
-    if (!isValidUrl(originalUrl)) {
-      return res.status(400).json({ error: 'URL invalide (doit commencer par http:// ou https://)' });
-    }
-    
-    // Sanitize name
-    const sanitizedName = name.substring(0, 200).trim();
-    
-    // Check plan limits
-    const { data: user } = await supabase
-      .from('users')
-      .select('plan, click_threshold')
-      .eq('id', req.userId)
-      .single();
-    
-    const { count } = await supabase
-      .from('links')
-      .select('id', { count: 'exact' })
-      .eq('user_id', req.userId);
-    
-    const limit = PLAN_LIMITS[user?.plan] || PLAN_LIMITS.free;
-    
-    if ((count || 0) >= limit) {
-      return res.status(403).json({ 
-        error: 'Limite atteinte',
-        message: 'Passez à Pro pour créer plus de liens',
-        upgrade: true
+        `
       });
     }
     
-    // Generate slug from URL or fallback to random code
-    let shortCode;
-    const extractedSlug = extractSlugFromUrl(originalUrl);
+    res.json({ message: 'Magic link sent! Check your email.' });
     
-    if (extractedSlug) {
-      shortCode = await generateUniqueSlug(extractedSlug);
-    } else {
-      shortCode = generateShortCode();
+  } catch (error) {
+    console.error('Auth request error:', error);
+    res.status(500).json({ error: 'Failed to send magic link' });
+  }
+});
+
+// Verify magic link
+app.get('/api/auth/verify', async (req, res) => {
+  try {
+    const { token } = req.query;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Token is required' });
     }
     
-    // Use custom threshold from request, or user default, or 5
-    let threshold = 5;
-    if (clickThreshold !== undefined) {
-      const parsed = parseInt(clickThreshold);
-      if (parsed >= 1 && parsed <= 100) {
-        threshold = parsed;
-      }
-    } else if (user?.click_threshold) {
-      threshold = user.click_threshold;
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Generate session token (longer lived)
+    const sessionToken = jwt.sign(
+      { id: decoded.id, email: decoded.email },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    
+    res.json({ token: sessionToken, user: decoded });
+    
+  } catch (error) {
+    res.status(403).json({ error: 'Invalid or expired token' });
+  }
+});
+
+// Get current user
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', req.user.id)
+      .single();
+      
+    if (error) throw error;
+    res.json(user);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+// ============================================================
+// LINKS ENDPOINTS (existing functionality)
+// ============================================================
+
+// Create a tracked link
+app.post('/api/links', authenticateToken, async (req, res) => {
+  try {
+    const { name, original_url, custom_slug, threshold } = req.body;
+    const userId = req.user.id;
+    
+    // Check link limit for free users
+    const { data: user } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', userId)
+      .single();
+      
+    const { count } = await supabase
+      .from('links')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+      
+    const limit = user.plan === 'pro' ? 999 : 5;
+    if (count >= limit) {
+      return res.status(403).json({ error: `Link limit reached (${limit}). Upgrade to PRO for unlimited links.` });
     }
     
-    const { data: link, error } = await supabase
+    // Generate or use custom slug
+    let short_code = custom_slug || generateShortCode();
+    
+    // Check if slug is taken
+    const { data: existing } = await supabase
+      .from('links')
+      .select('id')
+      .eq('short_code', short_code)
+      .single();
+      
+    if (existing) {
+      short_code = generateShortCode(); // Generate new one if taken
+    }
+    
+    const { data, error } = await supabase
       .from('links')
       .insert({
-        user_id: req.userId,
-        name: sanitizedName,
-        original_url: originalUrl,
-        short_code: shortCode,
-        click_threshold: threshold,
-        alerts_enabled: true
+        user_id: userId,
+        name: name || 'Untitled Link',
+        original_url,
+        short_code,
+        threshold: threshold || 3
       })
       .select()
       .single();
-    
+      
     if (error) throw error;
     
-    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
-    
     res.json({
-      success: true,
-      link: {
-        id: link.id,
-        name: link.name,
-        originalUrl: link.original_url,
-        shortCode: link.short_code,
-        trackableUrl: baseUrl + '/' + shortCode,
-        clickThreshold: link.click_threshold,
-        createdAt: link.created_at
-      }
+      ...data,
+      tracking_url: `${BASE_URL}/l/${short_code}`
     });
     
   } catch (error) {
-    console.error('Create link error');
-    res.status(500).json({ error: 'Erreur création lien' });
+    console.error('Create link error:', error);
+    res.status(500).json({ error: 'Failed to create link' });
   }
 });
 
-app.get('/api/links', authMiddleware, async (req, res) => {
+// Get user's links
+app.get('/api/links', authenticateToken, async (req, res) => {
   try {
-    const { data: links, error } = await supabase
+    const { data, error } = await supabase
       .from('links')
       .select('*')
-      .eq('user_id', req.userId)
+      .eq('user_id', req.user.id)
       .order('created_at', { ascending: false });
-    
+      
     if (error) throw error;
     
-    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
-    
-    const linksWithStats = await Promise.all((links || []).map(async (link) => {
-      const { data: clicks } = await supabase
-        .from('clicks')
-        .select('*')
-        .eq('link_id', link.id)
-        .order('timestamp', { ascending: false });
-      
-      const humanClicks = (clicks || []).filter(c => !c.is_bot);
-      const botClicks = (clicks || []).filter(c => c.is_bot);
-      const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
-      
-      return {
-        id: link.id,
-        name: link.name,
-        originalUrl: link.original_url,
-        shortCode: link.short_code,
-        trackableUrl: baseUrl + '/' + link.short_code,
-        clickThreshold: link.click_threshold || 5,
-        alertsEnabled: link.alerts_enabled !== false,
-        createdAt: link.created_at,
-        stats: {
-          totalClicks: humanClicks.length,
-          botClicks: botClicks.length,
-          intentScore: calculateIntentScore(clicks, link.click_threshold || 5),
-          uniqueVisitors: new Set(humanClicks.map(c => c.ip_address)).size,
-          lastClickAt: lastClick ? lastClick.timestamp : null,
-          lastClickFormatted: lastClick ? formatDateFR(lastClick.timestamp) : null
-        }
-      };
+    // Add tracking URLs
+    const linksWithUrls = data.map(link => ({
+      ...link,
+      tracking_url: `${BASE_URL}/l/${link.short_code}`
     }));
     
-    res.json({ success: true, links: linksWithStats });
+    res.json(linksWithUrls);
     
   } catch (error) {
-    console.error('Get links error');
-    res.status(500).json({ error: 'Erreur' });
+    res.status(500).json({ error: 'Failed to get links' });
   }
 });
 
-// Get single link with detailed analytics
-app.get('/api/links/:linkId', authMiddleware, async (req, res) => {
+// Get link stats
+app.get('/api/links/:id/stats', authenticateToken, async (req, res) => {
   try {
-    const { linkId } = req.params;
+    const { id } = req.params;
     
-    const { data: link, error } = await supabase
-      .from('links')
-      .select('*')
-      .eq('id', linkId)
-      .eq('user_id', req.userId)
-      .single();
-    
-    if (error || !link) {
-      return res.status(404).json({ error: 'Lien non trouvé' });
-    }
-    
-    const { data: clicks } = await supabase
+    const { data: clicks, error } = await supabase
       .from('clicks')
       .select('*')
-      .eq('link_id', linkId)
+      .eq('link_id', id)
       .order('timestamp', { ascending: false });
+      
+    if (error) throw error;
     
-    const humanClicks = (clicks || []).filter(c => !c.is_bot);
-    const botClicks = (clicks || []).filter(c => c.is_bot);
-    const lastClick = humanClicks.length > 0 ? humanClicks[0] : null;
-    
-    // Preferred hours
-    const hourCounts = {};
-    humanClicks.forEach(click => {
-      const hour = new Date(click.timestamp).getHours();
-      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-    });
-    const preferredHours = Object.entries(hourCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([hour, count]) => ({ hour: parseInt(hour), count }));
-    
-    // Preferred days
-    const dayCounts = {};
-    const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-    humanClicks.forEach(click => {
-      const day = new Date(click.timestamp).getDay();
-      dayCounts[day] = (dayCounts[day] || 0) + 1;
-    });
-    const preferredDays = Object.entries(dayCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([day, count]) => ({ day: dayNames[parseInt(day)], count }));
-    
-    // Avg return delay
-    const ipVisits = {};
-    humanClicks.forEach(click => {
-      if (!ipVisits[click.ip_address]) ipVisits[click.ip_address] = [];
-      ipVisits[click.ip_address].push(new Date(click.timestamp));
-    });
-    let totalDelay = 0;
-    let delayCount = 0;
-    Object.values(ipVisits).forEach(visits => {
-      if (visits.length > 1) {
-        visits.sort((a, b) => a - b);
-        for (let i = 1; i < visits.length; i++) {
-          totalDelay += (visits[i] - visits[i-1]) / 60000;
-          delayCount++;
-        }
-      }
-    });
-    const avgReturnDelay = delayCount > 0 ? Math.round(totalDelay / delayCount) : null;
-    
-    // Multi-device users
-    const ipDevices = {};
-    humanClicks.forEach(click => {
-      const ip = click.ip_address;
-      if (!ipDevices[ip]) ipDevices[ip] = new Set();
-      ipDevices[ip].add(click.device_type);
-    });
-    const multiDeviceUsers = Object.entries(ipDevices)
-      .filter(([ip, devices]) => devices.size > 1)
-      .map(([ip, devices]) => ({ ip, devices: Array.from(devices) }));
-    
-    // Visitors
-    const visitorMap = {};
-    humanClicks.forEach(click => {
-      const ip = click.ip_address;
-      if (!visitorMap[ip]) {
-        visitorMap[ip] = {
-          ip,
-          city: click.city,
-          country: click.country,
-          device: click.device_type,
-          browser: click.browser,
-          visits: [],
-          firstVisit: click.timestamp,
-          lastVisit: click.timestamp
-        };
-      }
-      visitorMap[ip].visits.push(click.timestamp);
-      if (new Date(click.timestamp) < new Date(visitorMap[ip].firstVisit)) {
-        visitorMap[ip].firstVisit = click.timestamp;
-      }
-      if (new Date(click.timestamp) > new Date(visitorMap[ip].lastVisit)) {
-        visitorMap[ip].lastVisit = click.timestamp;
-      }
-    });
-    
-    const visitors = Object.values(visitorMap).map(v => ({
-      ...v,
-      visitCount: v.visits.length,
-      lastVisitFormatted: formatDateFR(v.lastVisit),
-      isMultiDevice: ipDevices[v.ip] && ipDevices[v.ip].size > 1
-    })).sort((a, b) => b.visitCount - a.visitCount);
-    
-    // Device breakdown
-    const deviceBreakdown = {};
-    humanClicks.forEach(click => {
-      deviceBreakdown[click.device_type] = (deviceBreakdown[click.device_type] || 0) + 1;
-    });
-    
-    // Referrer breakdown
-    const referrerCounts = {};
-    humanClicks.forEach(click => {
-      let source = 'Direct';
-      if (click.referrer && click.referrer !== 'direct') {
-        try {
-          const url = new URL(click.referrer);
-          source = url.hostname;
-        } catch (e) {}
-      }
-      referrerCounts[source] = (referrerCounts[source] || 0) + 1;
-    });
-    const referrerBreakdown = Object.entries(referrerCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([source, count]) => ({ source, count }));
-    
-    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
+    // Calculate stats
+    const totalClicks = clicks.length;
+    const uniqueIps = [...new Set(clicks.map(c => c.ip_address))].length;
+    const devices = clicks.reduce((acc, c) => {
+      acc[c.device_type] = (acc[c.device_type] || 0) + 1;
+      return acc;
+    }, {});
     
     res.json({
-      success: true,
-      link: {
-        id: link.id,
-        name: link.name,
-        originalUrl: link.original_url,
-        shortCode: link.short_code,
-        trackableUrl: baseUrl + '/' + link.short_code,
-        clickThreshold: link.click_threshold || 5,
-        alertsEnabled: link.alerts_enabled !== false,
-        createdAt: link.created_at
-      },
-      analytics: {
-        totalClicks: humanClicks.length,
-        botClicks: botClicks.length,
-        uniqueVisitors: visitors.length,
-        intentScore: calculateIntentScore(clicks, link.click_threshold || 5),
-        lastClickAt: lastClick ? lastClick.timestamp : null,
-        lastClickFormatted: lastClick ? formatDateFR(lastClick.timestamp) : 'Aucun clic',
-        preferredHours,
-        preferredDays,
-        avgReturnDelayMinutes: avgReturnDelay,
-        referrerBreakdown,
-        deviceBreakdown,
-        multiDeviceUsers,
-        hasMultiDeviceActivity: multiDeviceUsers.length > 0,
-        visitors
-      }
+      total_clicks: totalClicks,
+      unique_visitors: uniqueIps,
+      devices,
+      recent_clicks: clicks.slice(0, 10)
     });
     
   } catch (error) {
-    console.error('Get link error');
-    res.status(500).json({ error: 'Erreur' });
+    res.status(500).json({ error: 'Failed to get stats' });
   }
 });
 
-app.delete('/api/links/:linkId', authMiddleware, async (req, res) => {
+// Track link click (public endpoint)
+app.get('/l/:shortCode', async (req, res) => {
   try {
-    const { linkId } = req.params;
+    const { shortCode } = req.params;
+    const userAgent = req.headers['user-agent'] || '';
+    const ip = getClientIp(req);
+    const referrer = req.headers['referer'] || 'direct';
     
-    // Verify ownership first
-    const { data: link } = await supabase
+    // Get link
+    const { data: link, error } = await supabase
       .from('links')
-      .select('id')
-      .eq('id', linkId)
-      .eq('user_id', req.userId)
+      .select('*, users(*)')
+      .eq('short_code', shortCode)
       .single();
-    
-    if (!link) {
-      return res.status(404).json({ error: 'Lien non trouvé' });
+      
+    if (error || !link) {
+      return res.status(404).send('Link not found');
     }
     
-    await supabase.from('alerts_sent').delete().eq('link_id', linkId);
-    await supabase.from('clicks').delete().eq('link_id', linkId);
+    // Check if bot
+    const botCheck = detectBot(userAgent);
+    if (botCheck.isBot) {
+      return res.redirect(link.original_url);
+    }
+    
+    // Get device and location info
+    const deviceInfo = extractDeviceInfo(userAgent);
+    const geo = getGeolocation(ip);
+    
+    // Record click
+    await supabase.from('clicks').insert({
+      link_id: link.id,
+      ip_address: ip,
+      country: geo.country,
+      city: geo.city,
+      device_type: deviceInfo.deviceType,
+      device_model: deviceInfo.deviceModel,
+      os: deviceInfo.os,
+      os_version: deviceInfo.osVersion,
+      browser: deviceInfo.browser,
+      browser_version: deviceInfo.browserVersion,
+      referrer: referrer,
+      user_agent: userAgent
+    });
+    
+    // Update click count
+    const newClicks = (link.clicks || 0) + 1;
+    await supabase
+      .from('links')
+      .update({ clicks: newClicks })
+      .eq('id', link.id);
+    
+    // Check if should send alert
+    const threshold = link.threshold || 3;
+    if (newClicks % threshold === 0) {
+      // Check if alert already sent for this count
+      const { data: existingAlert } = await supabase
+        .from('alerts_sent')
+        .select('id')
+        .eq('link_id', link.id)
+        .eq('click_count', newClicks)
+        .single();
+        
+      if (!existingAlert && link.users) {
+        const user = link.users;
+        const location = `${geo.city}, ${geo.country}`;
+        
+        // Send email alert
+        if (user.email && user.notify_email !== false) {
+          const emailHtml = getLinkAlertEmailHtml(
+            link.name,
+            newClicks,
+            `${deviceInfo.deviceType} (${deviceInfo.os})`,
+            location,
+            `${BASE_URL}/dashboard`
+          );
+          await sendEmailAlert(
+            user.email,
+            `🔔 ${link.name} - ${newClicks} views!`,
+            emailHtml
+          );
+        }
+        
+        // Send WhatsApp alert
+        if (user.whatsapp_number && user.notify_whatsapp) {
+          await sendWhatsAppAlert(
+            user.whatsapp_number,
+            `🔔 Noly Alert!\n\n"${link.name}" just hit ${newClicks} views!\n\n📱 Device: ${deviceInfo.deviceType}\n📍 Location: ${location}\n\nTime to follow up!`
+          );
+        }
+        
+        // Record alert sent
+        await supabase.from('alerts_sent').insert({
+          user_id: user.id,
+          link_id: link.id,
+          click_count: newClicks
+        });
+      }
+    }
+    
+    // Redirect to destination
+    res.redirect(link.original_url);
+    
+  } catch (error) {
+    console.error('Track click error:', error);
+    res.status(500).send('Error processing link');
+  }
+});
+
+// ============================================================
+// SMART PAGES ENDPOINTS (PRO feature)
+// ============================================================
+
+// Create a Smart Page
+app.post('/api/pages', authenticateToken, requirePro, async (req, res) => {
+  try {
+    const { name, username, bio } = req.body;
+    const userId = req.user.id;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    
+    // Clean username
+    const cleanUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    
+    // Check if username is taken
+    const { data: existing } = await supabase
+      .from('pages')
+      .select('id')
+      .eq('username', cleanUsername)
+      .single();
+      
+    if (existing) {
+      return res.status(400).json({ error: 'Username is already taken' });
+    }
+    
+    const { data, error } = await supabase
+      .from('pages')
+      .insert({
+        user_id: userId,
+        name: name || 'My Page',
+        username: cleanUsername,
+        bio: bio || ''
+      })
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    res.json({
+      ...data,
+      page_url: `${BASE_URL}/@${cleanUsername}`
+    });
+    
+  } catch (error) {
+    console.error('Create page error:', error);
+    res.status(500).json({ error: 'Failed to create page' });
+  }
+});
+
+// Get user's pages
+app.get('/api/pages', authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('pages')
+      .select('*, page_links(*)')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    
+    const pagesWithUrls = data.map(page => ({
+      ...page,
+      page_url: `${BASE_URL}/@${page.username}`
+    }));
+    
+    res.json(pagesWithUrls);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get pages' });
+  }
+});
+
+// Get single page
+app.get('/api/pages/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { data, error } = await supabase
+      .from('pages')
+      .select('*, page_links(*)')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .single();
+      
+    if (error) throw error;
+    
+    res.json({
+      ...data,
+      page_url: `${BASE_URL}/@${data.username}`
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get page' });
+  }
+});
+
+// Update a page
+app.put('/api/pages/:id', authenticateToken, requirePro, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, bio, theme } = req.body;
+    
+    const { data, error } = await supabase
+      .from('pages')
+      .update({ name, bio, theme, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    res.json(data);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update page' });
+  }
+});
+
+// Delete a page
+app.delete('/api/pages/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
     
     const { error } = await supabase
-      .from('links')
+      .from('pages')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', req.user.id);
+      
+    if (error) throw error;
+    
+    res.json({ message: 'Page deleted' });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete page' });
+  }
+});
+
+// Add link to a page
+app.post('/api/pages/:pageId/links', authenticateToken, requirePro, async (req, res) => {
+  try {
+    const { pageId } = req.params;
+    const { title, url, icon } = req.body;
+    
+    // Verify page belongs to user
+    const { data: page } = await supabase
+      .from('pages')
+      .select('id')
+      .eq('id', pageId)
+      .eq('user_id', req.user.id)
+      .single();
+      
+    if (!page) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+    
+    // Get current max position
+    const { data: links } = await supabase
+      .from('page_links')
+      .select('position')
+      .eq('page_id', pageId)
+      .order('position', { ascending: false })
+      .limit(1);
+      
+    const newPosition = links && links.length > 0 ? links[0].position + 1 : 0;
+    
+    const { data, error } = await supabase
+      .from('page_links')
+      .insert({
+        page_id: pageId,
+        title: title || 'Untitled Link',
+        url,
+        icon,
+        position: newPosition
+      })
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    res.json(data);
+    
+  } catch (error) {
+    console.error('Add page link error:', error);
+    res.status(500).json({ error: 'Failed to add link' });
+  }
+});
+
+// Update page link
+app.put('/api/pages/:pageId/links/:linkId', authenticateToken, async (req, res) => {
+  try {
+    const { pageId, linkId } = req.params;
+    const { title, url, icon, position } = req.body;
+    
+    const { data, error } = await supabase
+      .from('page_links')
+      .update({ title, url, icon, position })
+      .eq('id', linkId)
+      .eq('page_id', pageId)
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    res.json(data);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update link' });
+  }
+});
+
+// Delete page link
+app.delete('/api/pages/:pageId/links/:linkId', authenticateToken, async (req, res) => {
+  try {
+    const { pageId, linkId } = req.params;
+    
+    const { error } = await supabase
+      .from('page_links')
       .delete()
       .eq('id', linkId)
-      .eq('user_id', req.userId);
-    
+      .eq('page_id', pageId);
+      
     if (error) throw error;
     
-    res.json({ success: true });
+    res.json({ message: 'Link deleted' });
     
   } catch (error) {
-    res.status(500).json({ error: 'Erreur suppression' });
+    res.status(500).json({ error: 'Failed to delete link' });
   }
 });
 
-app.put('/api/links/:linkId/alerts', authMiddleware, async (req, res) => {
+// Public: View a Smart Page
+app.get('/@:username', async (req, res) => {
   try {
-    const { linkId } = req.params;
-    const { enabled } = req.body;
+    const { username } = req.params;
+    const userAgent = req.headers['user-agent'] || '';
+    const ip = getClientIp(req);
     
-    const { data: link, error } = await supabase
-      .from('links')
-      .update({ alerts_enabled: enabled })
-      .eq('id', linkId)
-      .eq('user_id', req.userId)
-      .select()
+    const { data: page, error } = await supabase
+      .from('pages')
+      .select('*, page_links(*), users(*)')
+      .eq('username', username.toLowerCase())
+      .eq('is_active', true)
       .single();
-    
-    if (error) throw error;
-    
-    res.json({ success: true, alertsEnabled: link.alerts_enabled });
-    
-  } catch (error) {
-    console.error('Toggle alerts error');
-    res.status(500).json({ error: 'Erreur' });
-  }
-});
-
-// Update link threshold
-app.put('/api/links/:linkId/threshold', authMiddleware, async (req, res) => {
-  try {
-    const { linkId } = req.params;
-    const { clickThreshold } = req.body;
-    
-    const threshold = parseInt(clickThreshold);
-    if (isNaN(threshold) || threshold < 1 || threshold > 100) {
-      return res.status(400).json({ error: 'Seuil invalide (1-100)' });
+      
+    if (error || !page) {
+      return res.status(404).json({ error: 'Page not found' });
     }
     
-    const { data: link, error } = await supabase
-      .from('links')
-      .update({ click_threshold: threshold })
-      .eq('id', linkId)
-      .eq('user_id', req.userId)
-      .select()
-      .single();
+    // Check if bot
+    const botCheck = detectBot(userAgent);
+    if (!botCheck.isBot) {
+      // Record page view
+      const deviceInfo = extractDeviceInfo(userAgent);
+      const geo = getGeolocation(ip);
+      
+      await supabase.from('page_views').insert({
+        page_id: page.id,
+        ip_address: ip,
+        country: geo.country,
+        city: geo.city,
+        device_type: deviceInfo.deviceType,
+        os: deviceInfo.os,
+        browser: deviceInfo.browser,
+        referrer: req.headers['referer'] || 'direct',
+        user_agent: userAgent
+      });
+      
+      // Increment view count
+      await supabase.rpc('increment_page_views', { p_id: page.id });
+    }
     
-    if (error) throw error;
-    
-    res.json({ success: true, clickThreshold: link.click_threshold });
+    // Return page data (remove sensitive user info)
+    const { users, ...pageData } = page;
+    res.json({
+      ...pageData,
+      page_links: page.page_links.sort((a, b) => a.position - b.position)
+    });
     
   } catch (error) {
-    console.error('Update threshold error');
-    res.status(500).json({ error: 'Erreur' });
+    console.error('View page error:', error);
+    res.status(500).json({ error: 'Failed to load page' });
   }
 });
 
-// ============ TRACKING ENDPOINT ============
+// Track click on page link (public endpoint)
+app.get('/p/:linkId', async (req, res) => {
+  try {
+    const { linkId } = req.params;
+    const userAgent = req.headers['user-agent'] || '';
+    const ip = getClientIp(req);
+    
+    // Get link and page info
+    const { data: link, error } = await supabase
+      .from('page_links')
+      .select('*, pages(*, users(*))')
+      .eq('id', linkId)
+      .single();
+      
+    if (error || !link) {
+      return res.status(404).send('Link not found');
+    }
+    
+    // Check if bot
+    const botCheck = detectBot(userAgent);
+    if (!botCheck.isBot) {
+      const deviceInfo = extractDeviceInfo(userAgent);
+      const geo = getGeolocation(ip);
+      
+      // Record click
+      await supabase.from('page_link_clicks').insert({
+        page_link_id: linkId,
+        page_id: link.page_id,
+        ip_address: ip,
+        country: geo.country,
+        city: geo.city,
+        device_type: deviceInfo.deviceType,
+        os: deviceInfo.os,
+        browser: deviceInfo.browser,
+        referrer: req.headers['referer'] || 'direct',
+        user_agent: userAgent
+      });
+      
+      // Increment click count
+      await supabase.rpc('increment_page_link_clicks', { link_id: linkId });
+      
+      // Send alert to page owner
+      const newClicks = (link.clicks || 0) + 1;
+      if (newClicks % 3 === 0 && link.pages && link.pages.users) {
+        const user = link.pages.users;
+        const location = `${geo.city}, ${geo.country}`;
+        
+        if (user.email && user.notify_email !== false) {
+          const emailHtml = getPageLinkAlertEmailHtml(
+            link.pages.name,
+            link.title,
+            newClicks,
+            `${deviceInfo.deviceType} (${deviceInfo.os})`,
+            location
+          );
+          await sendEmailAlert(
+            user.email,
+            `📄 ${link.title} clicked on your page!`,
+            emailHtml
+          );
+        }
+      }
+    }
+    
+    // Redirect to destination
+    res.redirect(link.url);
+    
+  } catch (error) {
+    console.error('Track page link error:', error);
+    res.status(500).send('Error processing link');
+  }
+});
 
-// New short format: noly.pro/slug
-app.get('/:shortCode', async (req, res) => {
+// Get page stats
+app.get('/api/pages/:id/stats', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get page views
+    const { data: views } = await supabase
+      .from('page_views')
+      .select('*')
+      .eq('page_id', id)
+      .order('timestamp', { ascending: false })
+      .limit(100);
+      
+    // Get link clicks
+    const { data: clicks } = await supabase
+      .from('page_link_clicks')
+      .select('*, page_links(title)')
+      .eq('page_id', id)
+      .order('timestamp', { ascending: false })
+      .limit(100);
+      
+    res.json({
+      total_views: views?.length || 0,
+      total_clicks: clicks?.length || 0,
+      recent_views: views?.slice(0, 10) || [],
+      recent_clicks: clicks?.slice(0, 10) || []
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+// ============================================================
+// QR CODES ENDPOINTS (PRO feature)
+// ============================================================
+
+// Create a QR code
+app.post('/api/qr', authenticateToken, requirePro, async (req, res) => {
+  try {
+    const { name, destination_url, alert_threshold } = req.body;
+    const userId = req.user.id;
+    
+    if (!destination_url) {
+      return res.status(400).json({ error: 'Destination URL is required' });
+    }
+    
+    const short_code = generateShortCode();
+    
+    const { data, error } = await supabase
+      .from('qr_codes')
+      .insert({
+        user_id: userId,
+        name: name || 'Untitled QR Code',
+        destination_url,
+        short_code,
+        alert_threshold: alert_threshold || 3
+      })
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    res.json({
+      ...data,
+      qr_url: `${BASE_URL}/qr/${short_code}`
+    });
+    
+  } catch (error) {
+    console.error('Create QR error:', error);
+    res.status(500).json({ error: 'Failed to create QR code' });
+  }
+});
+
+// Get user's QR codes
+app.get('/api/qr', authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('qr_codes')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    
+    const qrWithUrls = data.map(qr => ({
+      ...qr,
+      qr_url: `${BASE_URL}/qr/${qr.short_code}`
+    }));
+    
+    res.json(qrWithUrls);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get QR codes' });
+  }
+});
+
+// Get single QR code
+app.get('/api/qr/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { data, error } = await supabase
+      .from('qr_codes')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .single();
+      
+    if (error) throw error;
+    
+    res.json({
+      ...data,
+      qr_url: `${BASE_URL}/qr/${data.short_code}`
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get QR code' });
+  }
+});
+
+// Update QR code
+app.put('/api/qr/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, destination_url, alert_threshold, is_active } = req.body;
+    
+    const { data, error } = await supabase
+      .from('qr_codes')
+      .update({
+        name,
+        destination_url,
+        alert_threshold,
+        is_active,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('user_id', req.user.id)
+      .select()
+      .single();
+      
+    if (error) throw error;
+    
+    res.json(data);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update QR code' });
+  }
+});
+
+// Delete QR code
+app.delete('/api/qr/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { error } = await supabase
+      .from('qr_codes')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', req.user.id);
+      
+    if (error) throw error;
+    
+    res.json({ message: 'QR code deleted' });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete QR code' });
+  }
+});
+
+// Track QR code scan (public endpoint)
+app.get('/qr/:shortCode', async (req, res) => {
   try {
     const { shortCode } = req.params;
-    
-    // Skip API routes and static files
-    if (shortCode === 'api' || shortCode === 'health' || shortCode.includes('.')) {
-      return res.status(404).send('Not found');
-    }
-    
-    // Allow alphanumeric and dashes, 3-60 chars
-    if (!/^[a-z0-9-]{3,60}$/.test(shortCode)) {
-      return res.status(404).send('Page non trouvée');
-    }
-    
-    const { data: link, error } = await supabase
-      .from('links')
-      .select('*')
-      .eq('short_code', shortCode)
-      .single();
-    
-    if (error || !link) {
-      return res.status(404).send('Page non trouvée');
-    }
-    
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
     const userAgent = req.headers['user-agent'] || '';
-    const referrer = req.headers['referer'] || 'direct';
+    const ip = getClientIp(req);
     
+    // Get QR code
+    const { data: qr, error } = await supabase
+      .from('qr_codes')
+      .select('*, users(*)')
+      .eq('short_code', shortCode)
+      .eq('is_active', true)
+      .single();
+      
+    if (error || !qr) {
+      return res.status(404).send('QR code not found');
+    }
+    
+    // Check if bot
+    const botCheck = detectBot(userAgent);
+    
+    // Get device and location info
     const deviceInfo = extractDeviceInfo(userAgent);
-    const geoInfo = getGeolocation(ip);
-    const botInfo = detectBot(userAgent);
+    const geo = getGeolocation(ip);
     
-    // Record click
-    await supabase.from('clicks').insert({
-      link_id: link.id,
+    // Record scan
+    await supabase.from('qr_scans').insert({
+      qr_id: qr.id,
       ip_address: ip,
-      country: geoInfo.country,
-      city: geoInfo.city,
+      country: geo.country,
+      city: geo.city,
       device_type: deviceInfo.deviceType,
       device_model: deviceInfo.deviceModel,
       os: deviceInfo.os,
       os_version: deviceInfo.osVersion,
       browser: deviceInfo.browser,
       browser_version: deviceInfo.browserVersion,
-      referrer,
-      user_agent: userAgent.substring(0, 500),
-      is_bot: botInfo.isBot,
-      bot_type: botInfo.botType
+      referrer: req.headers['referer'] || 'direct',
+      user_agent: userAgent,
+      is_bot: botCheck.isBot
     });
     
-    // Auto-alert check (async)
-    if (!botInfo.isBot) {
-      setImmediate(async () => {
-        try {
-          const { data: allClicks } = await supabase
-            .from('clicks')
-            .select('*')
-            .eq('link_id', link.id);
+    // Update scan count (only for non-bots)
+    if (!botCheck.isBot) {
+      const newScans = (qr.scans || 0) + 1;
+      await supabase
+        .from('qr_codes')
+        .update({ scans: newScans, updated_at: new Date().toISOString() })
+        .eq('id', qr.id);
+      
+      // Check if should send alert
+      const threshold = qr.alert_threshold || 3;
+      if (newScans % threshold === 0 && qr.users) {
+        // Check if alert already sent for this count
+        const { data: existingAlert } = await supabase
+          .from('qr_alerts_sent')
+          .select('id')
+          .eq('qr_id', qr.id)
+          .eq('scan_count', newScans)
+          .single();
           
-          const threshold = link.click_threshold || 5;
-          const humanClicks = (allClicks || []).filter(c => !c.is_bot);
-          const totalHumanClicks = humanClicks.length;
+        if (!existingAlert) {
+          const user = qr.users;
+          const location = `${geo.city}, ${geo.country}`;
           
-          console.log('Click on link - Total:', totalHumanClicks, '- Threshold:', threshold);
-          
-          // Check if we've hit a threshold multiple (1, 2, 3... x threshold)
-          if (totalHumanClicks > 0 && totalHumanClicks % threshold === 0 && link.alerts_enabled !== false) {
-            
-            // Check if we already sent an alert for this exact click count
-            const { data: existingAlert } = await supabase
-              .from('alerts_sent')
-              .select('id')
-              .eq('link_id', link.id)
-              .eq('click_count', totalHumanClicks)
-              .single();
-            
-            if (!existingAlert) {
-              console.log('ALERT TRIGGERED at', totalHumanClicks, 'clicks');
-              
-              const { data: user } = await supabase
-                .from('users')
-                .select('email, whatsapp, plan')
-                .eq('id', link.user_id)
-                .single();
-              
-              if (user) {
-                const intentScore = calculateIntentScore(allClicks, threshold);
-                
-                if (user.email) {
-                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
-                }
-                if (user.whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp);
-                }
-                
-                await supabase.from('alerts_sent').insert({
-                  user_id: link.user_id,
-                  link_id: link.id,
-                  intent_score: intentScore,
-                  click_count: totalHumanClicks
-                });
-              }
-            }
+          // Send email alert
+          if (user.email && user.notify_email !== false) {
+            const emailHtml = getQrAlertEmailHtml(
+              qr.name,
+              newScans,
+              `${deviceInfo.deviceType} (${deviceInfo.os})`,
+              location
+            );
+            await sendEmailAlert(
+              user.email,
+              `📱 ${qr.name} - ${newScans} scans!`,
+              emailHtml
+            );
           }
-        } catch (e) {
-          console.error('Alert error');
+          
+          // Send WhatsApp alert
+          if (user.whatsapp_number && user.notify_whatsapp) {
+            await sendWhatsAppAlert(
+              user.whatsapp_number,
+              `📱 Noly Alert!\n\nYour QR code "${qr.name}" just hit ${newScans} scans!\n\n📱 Device: ${deviceInfo.deviceType}\n📍 Location: ${location}\n\nYour QR code is getting attention!`
+            );
+          }
+          
+          // Record alert sent
+          await supabase.from('qr_alerts_sent').insert({
+            user_id: user.id,
+            qr_id: qr.id,
+            scan_count: newScans
+          });
         }
-      });
+      }
     }
     
-    res.redirect(302, link.original_url);
+    // Redirect to destination
+    res.redirect(qr.destination_url);
     
   } catch (error) {
-    console.error('Track error');
-    res.status(500).send('Erreur');
+    console.error('Track QR scan error:', error);
+    res.status(500).send('Error processing QR code');
   }
 });
 
-// Legacy format: /d/shortcode (keep for backward compatibility)
-app.get('/d/:shortCode', async (req, res) => {
+// Get QR code stats
+app.get('/api/qr/:id/stats', authenticateToken, async (req, res) => {
   try {
-    const { shortCode } = req.params;
+    const { id } = req.params;
     
-    // Validate shortCode format
-    if (!/^[a-z0-9]{6}$/.test(shortCode)) {
-      return res.status(404).send('Page non trouvée');
-    }
-    
-    const { data: link, error } = await supabase
-      .from('links')
+    const { data: scans, error } = await supabase
+      .from('qr_scans')
       .select('*')
-      .eq('short_code', shortCode)
-      .single();
+      .eq('qr_id', id)
+      .eq('is_bot', false)
+      .order('timestamp', { ascending: false });
+      
+    if (error) throw error;
     
-    if (error || !link) {
-      return res.status(404).send('Page non trouvée');
-    }
+    // Calculate stats
+    const totalScans = scans.length;
+    const uniqueIps = [...new Set(scans.map(s => s.ip_address))].length;
+    const devices = scans.reduce((acc, s) => {
+      acc[s.device_type] = (acc[s.device_type] || 0) + 1;
+      return acc;
+    }, {});
+    const countries = scans.reduce((acc, s) => {
+      acc[s.country] = (acc[s.country] || 0) + 1;
+      return acc;
+    }, {});
     
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
-    const userAgent = req.headers['user-agent'] || '';
-    const referrer = req.headers['referer'] || 'direct';
-    
-    const deviceInfo = extractDeviceInfo(userAgent);
-    const geoInfo = getGeolocation(ip);
-    const botInfo = detectBot(userAgent);
-    
-    // Record click
-    await supabase.from('clicks').insert({
-      link_id: link.id,
-      ip_address: ip,
-      country: geoInfo.country,
-      city: geoInfo.city,
-      device_type: deviceInfo.deviceType,
-      device_model: deviceInfo.deviceModel,
-      os: deviceInfo.os,
-      os_version: deviceInfo.osVersion,
-      browser: deviceInfo.browser,
-      browser_version: deviceInfo.browserVersion,
-      referrer,
-      user_agent: userAgent.substring(0, 500), // Limit UA length
-      is_bot: botInfo.isBot,
-      bot_type: botInfo.botType
+    res.json({
+      total_scans: totalScans,
+      unique_visitors: uniqueIps,
+      devices,
+      countries,
+      recent_scans: scans.slice(0, 10)
     });
     
-    // Auto-alert check (async)
-    if (!botInfo.isBot) {
-      setImmediate(async () => {
-        try {
-          const { data: allClicks } = await supabase
-            .from('clicks')
-            .select('*')
-            .eq('link_id', link.id);
-          
-          const threshold = link.click_threshold || 5;
-          const humanClicks = (allClicks || []).filter(c => !c.is_bot);
-          const totalHumanClicks = humanClicks.length;
-          
-          console.log('Click on link - Total:', totalHumanClicks, '- Threshold:', threshold);
-          
-          // Check if we've hit a threshold multiple (1, 2, 3... x threshold)
-          if (totalHumanClicks > 0 && totalHumanClicks % threshold === 0 && link.alerts_enabled !== false) {
-            
-            // Check if we already sent an alert for this exact click count
-            const { data: existingAlert } = await supabase
-              .from('alerts_sent')
-              .select('id')
-              .eq('link_id', link.id)
-              .eq('click_count', totalHumanClicks)
-              .single();
-            
-            if (!existingAlert) {
-              console.log('ALERT TRIGGERED at', totalHumanClicks, 'clicks');
-              
-              const { data: user } = await supabase
-                .from('users')
-                .select('email, whatsapp, plan')
-                .eq('id', link.user_id)
-                .single();
-              
-              if (user) {
-                const intentScore = calculateIntentScore(allClicks, threshold);
-                
-                if (user.email) {
-                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
-                }
-                if (user.whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp);
-                }
-                
-                await supabase.from('alerts_sent').insert({
-                  user_id: link.user_id,
-                  link_id: link.id,
-                  intent_score: intentScore,
-                  click_count: totalHumanClicks
-                });
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Alert error');
-        }
-      });
-    }
-    
-    res.redirect(302, link.original_url);
-    
   } catch (error) {
-    console.error('Track error');
-    res.status(500).send('Erreur');
+    res.status(500).json({ error: 'Failed to get stats' });
   }
 });
 
-// Health check
+// ============================================================
+// DASHBOARD STATS ENDPOINT
+// ============================================================
+
+app.get('/api/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get total links and clicks
+    const { data: links } = await supabase
+      .from('links')
+      .select('id, clicks')
+      .eq('user_id', userId);
+      
+    const totalLinks = links?.length || 0;
+    const totalClicks = links?.reduce((sum, l) => sum + (l.clicks || 0), 0) || 0;
+    
+    // Get total pages and views
+    const { data: pages } = await supabase
+      .from('pages')
+      .select('id, total_views')
+      .eq('user_id', userId);
+      
+    const totalPages = pages?.length || 0;
+    const totalPageViews = pages?.reduce((sum, p) => sum + (p.total_views || 0), 0) || 0;
+    
+    // Get total QR codes and scans
+    const { data: qrCodes } = await supabase
+      .from('qr_codes')
+      .select('id, scans')
+      .eq('user_id', userId);
+      
+    const totalQrCodes = qrCodes?.length || 0;
+    const totalScans = qrCodes?.reduce((sum, q) => sum + (q.scans || 0), 0) || 0;
+    
+    // Get hot links (most active in last 24h)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentClicks } = await supabase
+      .from('clicks')
+      .select('link_id')
+      .gte('timestamp', yesterday);
+      
+    const hotLinkIds = [...new Set(recentClicks?.map(c => c.link_id) || [])];
+    
+    res.json({
+      total_links: totalLinks,
+      total_clicks: totalClicks,
+      total_pages: totalPages,
+      total_page_views: totalPageViews,
+      total_qr_codes: totalQrCodes,
+      total_scans: totalScans,
+      hot_leads: hotLinkIds.length
+    });
+    
+  } catch (error) {
+    console.error('Stats error:', error);
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', version: '8.0-custom-slugs' });
+  res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint non trouvé' });
-});
+// ============================================================
+// START SERVER
+// ============================================================
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Server error');
-  res.status(500).json({ error: 'Erreur serveur' });
-});
-
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('Noly API v8 CUSTOM SLUGS running on port ' + PORT);
+  console.log(`
+╔══════════════════════════════════════════════════════════╗
+║                    NOLY API v2.0.0                       ║
+║══════════════════════════════════════════════════════════║
+║  Server running on port ${PORT}                            ║
+║                                                          ║
+║  Features:                                               ║
+║  ✓ Link Tracking                                         ║
+║  ✓ Smart Link Pages (PRO)                                ║
+║  ✓ QR Code Tracking (PRO)                                ║
+║  ✓ Email Alerts (English)                                ║
+║  ✓ WhatsApp Alerts                                       ║
+║                                                          ║
+║  Endpoints:                                              ║
+║  • /l/:code     - Track link click                       ║
+║  • /@:username  - View Smart Page                        ║
+║  • /p/:linkId   - Track page link click                  ║
+║  • /qr/:code    - Track QR code scan                     ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+  `);
 });
