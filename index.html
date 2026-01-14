@@ -1596,8 +1596,8 @@
             }).catch(function() { pagesData = []; });
 
             apiRequest('/api/qr').then(function(data) {
-                // API returns {success: true, qrs: [...]} - extract the qrs array
-                qrData = (data && data.qrs) ? data.qrs : [];
+                // API returns {success: true, qrCodes: [...]} - extract the qrCodes array
+                qrData = (data && data.qrCodes) ? data.qrCodes : [];
                 if (currentView === 'qr') renderQR();
             }).catch(function() { qrData = []; });
         }
@@ -1955,11 +1955,11 @@
             var name = document.getElementById('newPageName').value;
             var username = document.getElementById('newPageUsername').value;
             if (!username) { showToast('Error', 'Username is required', 'error'); return; }
-            
+
             apiRequest('/api/pages', {method: 'POST', body: JSON.stringify({name: name || 'My Page', username: username})})
             .then(function(data) {
-                if (data.username) {
-                    showToast('Page created!', API_BASE + '/@' + data.username, 'success');
+                if (data.success && data.page) {
+                    showToast('Page created!', 'noly.pro/@' + data.page.username, 'success');
                     closeAllModals();
                     document.getElementById('newPageName').value = '';
                     document.getElementById('newPageUsername').value = '';
@@ -1967,16 +1967,16 @@
                 } else { showToast('Error', data.error || 'Failed', 'error'); }
             }).catch(function() { showToast('Error', 'Failed', 'error'); });
         }
-        
+
         function createQR() {
             var url = document.getElementById('newQRUrl').value;
             var name = document.getElementById('newQRName').value;
             if (!url) { showToast('Error', 'URL is required', 'error'); return; }
-            
-            apiRequest('/api/qr', {method: 'POST', body: JSON.stringify({destination_url: url, name: name || 'QR Code'})})
+
+            apiRequest('/api/qr', {method: 'POST', body: JSON.stringify({url: url, name: name || 'QR Code'})})
             .then(function(data) {
-                if (data.short_code) {
-                    showToast('QR created!', API_BASE + '/qr/' + data.short_code, 'success');
+                if (data.success && data.qrCode) {
+                    showToast('QR created!', 'Scan: ' + data.qrCode.scanUrl, 'success');
                     closeAllModals();
                     document.getElementById('newQRUrl').value = '';
                     document.getElementById('newQRName').value = '';
