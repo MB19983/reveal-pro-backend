@@ -633,6 +633,178 @@
             .app-content { padding: 16px; }
             .modal { width: 95%; }
         }
+
+        /* ==================== LINK DETAIL MODAL ==================== */
+        .modal.modal-large { max-width: 600px; }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .detail-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            background: var(--accent-soft);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+        .detail-icon svg { width: 28px; height: 28px; }
+        .detail-info { flex: 1; min-width: 0; }
+        .detail-name { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+        .detail-url { font-size: 0.85rem; color: var(--text-muted); word-break: break-all; }
+
+        .detail-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        .detail-actions .btn { flex: 1; padding: 12px; font-size: 0.9rem; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .analytics-card {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .analytics-value { font-size: 1.5rem; font-weight: 700; color: var(--text); }
+        .analytics-value.purple { color: var(--accent); }
+        .analytics-value.green { color: var(--success); }
+        .analytics-value.orange { color: var(--warning); }
+        .analytics-value.blue { color: var(--info); }
+        .analytics-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+
+        .detail-section { margin-bottom: 20px; }
+        .detail-section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .time-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .time-card {
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+        .time-value { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
+        .time-label { font-size: 0.7rem; color: var(--text-muted); }
+
+        .device-bar {
+            display: flex;
+            gap: 4px;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .device-bar-segment { height: 100%; }
+        .device-bar-segment.mobile { background: var(--accent); }
+        .device-bar-segment.desktop { background: var(--info); }
+        .device-bar-segment.tablet { background: var(--success); }
+
+        .device-legend {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .device-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .device-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .device-dot.mobile { background: var(--accent); }
+        .device-dot.desktop { background: var(--info); }
+        .device-dot.tablet { background: var(--success); }
+
+        .visitor-list { max-height: 200px; overflow-y: auto; }
+        .visitor-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            margin-bottom: 8px;
+        }
+        .visitor-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+        .visitor-info { flex: 1; min-width: 0; }
+        .visitor-location { font-weight: 500; color: var(--text); font-size: 0.9rem; }
+        .visitor-meta { font-size: 0.75rem; color: var(--text-muted); }
+        .visitor-visits {
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .referrer-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            margin-bottom: 6px;
+        }
+        .referrer-source { font-size: 0.85rem; color: var(--text); }
+        .referrer-count { font-size: 0.85rem; font-weight: 600; color: var(--accent); }
+
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        @media (max-width: 640px) {
+            .analytics-grid { grid-template-columns: repeat(2, 1fr); }
+            .time-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -822,6 +994,15 @@
         </div>
     </div>
     
+    <!-- Link Detail Modal -->
+    <div class="modal modal-large" id="linkDetailModal">
+        <button class="modal-close" onclick="closeAllModals()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <div class="modal-header"><div class="modal-title">Link Analytics</div></div>
+        <div class="modal-content" id="linkDetailContent">
+            <div class="loading-spinner">Loading analytics...</div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast" id="toast">
         <div class="toast-icon success" id="toastIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg></div>
@@ -1355,23 +1536,24 @@
         
         function renderLinkCard(link) {
             var clicks = link.clicks || 0;
-            var isHot = clicks >= 10;
-            var isWarm = clicks >= 5 && clicks < 10;
+            var intentScore = link.intentScore || link.intent_score || 0;
+            var isHot = intentScore >= 70 || clicks >= 10;
+            var isWarm = (intentScore >= 40 && intentScore < 70) || (clicks >= 5 && clicks < 10);
             var badgeClass = isHot ? 'hot' : (isWarm ? 'warm' : 'cold');
             var badgeText = isHot ? 'Hot' : (isWarm ? 'Warm' : 'Cold');
-            
-            return '<div class="link-card' + (isHot ? ' hot' : '') + '" onclick="copyUrl(\'' + API_BASE + '/' + link.short_code + '\')">' +
+
+            return '<div class="link-card' + (isHot ? ' hot' : '') + '" onclick="openLinkDetail(\'' + link.id + '\')">' +
                 '<div class="link-header">' +
                     '<div class="link-info">' +
                         '<div class="link-name">' + escapeHTML(link.name || 'Untitled') + '</div>' +
                         '<div class="link-url">' + API_BASE + '/' + link.short_code + '</div>' +
                     '</div>' +
-                    '<span class="link-badge ' + badgeClass + '">' + badgeText + '</span>' +
+                    '<span class="link-badge ' + badgeClass + '">' + badgeText + ' ' + intentScore + '%</span>' +
                 '</div>' +
                 '<div class="link-stats">' +
                     '<div class="link-stat"><div class="link-stat-value">' + clicks + '</div><div class="link-stat-label">Clicks</div></div>' +
-                    '<div class="link-stat"><div class="link-stat-value">' + formatDate(link.created_at) + '</div><div class="link-stat-label">Created</div></div>' +
-                    '<div class="link-stat"><div class="link-stat-value">' + link.short_code + '</div><div class="link-stat-label">Code</div></div>' +
+                    '<div class="link-stat"><div class="link-stat-value">' + (link.uniqueVisitors || 0) + '</div><div class="link-stat-label">Visitors</div></div>' +
+                    '<div class="link-stat"><div class="link-stat-value">' + intentScore + '%</div><div class="link-stat-label">Intent</div></div>' +
                 '</div>' +
             '</div>';
         }
@@ -1620,7 +1802,204 @@
         function upgradePlan(plan) {
             showToast('Coming soon', 'Payment integration in progress', 'success');
         }
-        
+
+        // ==================== LINK DETAIL ====================
+        var currentLinkId = null;
+
+        function openLinkDetail(linkId) {
+            currentLinkId = linkId;
+            document.getElementById('linkDetailContent').innerHTML = '<div class="loading-spinner">Loading analytics...</div>';
+            openModal('linkDetailModal');
+
+            apiRequest('/api/links/' + linkId)
+                .then(function(data) {
+                    if (data.success && data.link) {
+                        renderLinkDetail(data.link, data.analytics);
+                    } else {
+                        document.getElementById('linkDetailContent').innerHTML = '<div class="loading-spinner">Error loading data</div>';
+                    }
+                })
+                .catch(function() {
+                    document.getElementById('linkDetailContent').innerHTML = '<div class="loading-spinner">Error loading data</div>';
+                });
+        }
+
+        function renderLinkDetail(link, analytics) {
+            var content = document.getElementById('linkDetailContent');
+            var a = analytics || {};
+
+            // Header
+            var html = '<div class="detail-header">' +
+                '<div class="detail-icon">' + ICONS.link + '</div>' +
+                '<div class="detail-info">' +
+                    '<div class="detail-name">' + escapeHTML(link.name || 'Untitled') + '</div>' +
+                    '<div class="detail-url">' + escapeHTML(link.originalUrl || link.original_url) + '</div>' +
+                '</div>' +
+            '</div>';
+
+            // Actions
+            html += '<div class="detail-actions">' +
+                '<button class="btn btn-primary" onclick="copyUrl(\'' + (link.trackableUrl || API_BASE + '/' + link.shortCode) + '\')">Copy Link</button>' +
+                '<button class="btn btn-secondary" onclick="window.open(\'' + escapeHTML(link.originalUrl || link.original_url) + '\', \'_blank\')">Open Original</button>' +
+                '<button class="btn btn-danger" onclick="deleteLink(\'' + link.id + '\')">Delete</button>' +
+            '</div>';
+
+            // Main stats
+            html += '<div class="analytics-grid">' +
+                '<div class="analytics-card"><div class="analytics-value purple">' + (a.totalClicks || 0) + '</div><div class="analytics-label">Total Clicks</div></div>' +
+                '<div class="analytics-card"><div class="analytics-value blue">' + (a.uniqueVisitors || 0) + '</div><div class="analytics-label">Unique Visitors</div></div>' +
+                '<div class="analytics-card"><div class="analytics-value orange">' + (a.intentScore || 0) + '%</div><div class="analytics-label">Intent Score</div></div>' +
+                '<div class="analytics-card"><div class="analytics-value green">' + (a.botClicks || 0) + '</div><div class="analytics-label">Bot Clicks</div></div>' +
+            '</div>';
+
+            // Last activity
+            html += '<div class="detail-section">' +
+                '<div class="detail-section-title">Last Activity</div>' +
+                '<div class="analytics-card" style="text-align:left;padding:16px;">' +
+                    '<div style="color:var(--text);">' + (a.lastClickFormatted || 'No clicks yet') + '</div>' +
+                '</div>' +
+            '</div>';
+
+            // Preferred times
+            if (a.preferredHours && a.preferredHours.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Preferred Hours</div>' +
+                    '<div class="time-grid">';
+                for (var i = 0; i < Math.min(a.preferredHours.length, 3); i++) {
+                    var h = a.preferredHours[i];
+                    html += '<div class="time-card">' +
+                        '<div class="time-value">' + h.hour + ':00</div>' +
+                        '<div class="time-label">' + h.count + ' visits</div>' +
+                    '</div>';
+                }
+                html += '</div></div>';
+            }
+
+            // Preferred days
+            if (a.preferredDays && a.preferredDays.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Preferred Days</div>' +
+                    '<div class="time-grid">';
+                for (var i = 0; i < Math.min(a.preferredDays.length, 3); i++) {
+                    var d = a.preferredDays[i];
+                    html += '<div class="time-card">' +
+                        '<div class="time-value">' + d.day + '</div>' +
+                        '<div class="time-label">' + d.count + ' visits</div>' +
+                    '</div>';
+                }
+                html += '</div></div>';
+            }
+
+            // Average return delay
+            if (a.avgReturnDelayMinutes) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Average Return Delay</div>' +
+                    '<div class="analytics-card">' +
+                        '<div class="analytics-value purple">' + a.avgReturnDelayMinutes + ' min</div>' +
+                        '<div class="analytics-label">Between visits</div>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            // Device breakdown
+            if (a.deviceBreakdown && Object.keys(a.deviceBreakdown).length > 0) {
+                var total = 0;
+                for (var key in a.deviceBreakdown) total += a.deviceBreakdown[key];
+
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Devices</div>' +
+                    '<div class="device-bar">';
+
+                var deviceTypes = ['mobile', 'desktop', 'tablet'];
+                for (var i = 0; i < deviceTypes.length; i++) {
+                    var type = deviceTypes[i];
+                    var count = a.deviceBreakdown[type] || 0;
+                    if (count > 0) {
+                        var percent = Math.round((count / total) * 100);
+                        html += '<div class="device-bar-segment ' + type + '" style="width:' + percent + '%"></div>';
+                    }
+                }
+                html += '</div><div class="device-legend">';
+                for (var i = 0; i < deviceTypes.length; i++) {
+                    var type = deviceTypes[i];
+                    var count = a.deviceBreakdown[type] || 0;
+                    if (count > 0) {
+                        var percent = Math.round((count / total) * 100);
+                        html += '<div class="device-legend-item"><div class="device-dot ' + type + '"></div>' +
+                            type.charAt(0).toUpperCase() + type.slice(1) + ' ' + percent + '%</div>';
+                    }
+                }
+                html += '</div></div>';
+            }
+
+            // Multi-device users
+            if (a.hasMultiDeviceActivity) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">🔥 Multi-Device Activity Detected</div>' +
+                    '<div class="analytics-card" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);">' +
+                        '<div style="color:var(--warning);font-weight:600;">High Interest Signal!</div>' +
+                        '<div style="color:var(--text-secondary);font-size:0.85rem;margin-top:4px;">' +
+                            a.multiDeviceUsers.length + ' visitor(s) viewed from multiple devices</div>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            // Referrers
+            if (a.referrerBreakdown && a.referrerBreakdown.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Traffic Sources</div>';
+                for (var i = 0; i < Math.min(a.referrerBreakdown.length, 5); i++) {
+                    var ref = a.referrerBreakdown[i];
+                    html += '<div class="referrer-item">' +
+                        '<span class="referrer-source">' + escapeHTML(ref.source) + '</span>' +
+                        '<span class="referrer-count">' + ref.count + '</span>' +
+                    '</div>';
+                }
+                html += '</div>';
+            }
+
+            // Visitors list
+            if (a.visitors && a.visitors.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Visitors (' + a.visitors.length + ')</div>' +
+                    '<div class="visitor-list">';
+                for (var i = 0; i < Math.min(a.visitors.length, 10); i++) {
+                    var v = a.visitors[i];
+                    var flag = v.country === 'FR' ? '🇫🇷' : (v.country === 'US' ? '🇺🇸' : '🌍');
+                    html += '<div class="visitor-item">' +
+                        '<div class="visitor-avatar">' + flag + '</div>' +
+                        '<div class="visitor-info">' +
+                            '<div class="visitor-location">' + escapeHTML(v.city || 'Unknown') + ', ' + escapeHTML(v.country || '') + '</div>' +
+                            '<div class="visitor-meta">' + escapeHTML(v.device || '') + ' • ' + escapeHTML(v.browser || '') +
+                                (v.isMultiDevice ? ' • 📱💻' : '') + '</div>' +
+                        '</div>' +
+                        '<span class="visitor-visits">' + v.visitCount + ' visits</span>' +
+                    '</div>';
+                }
+                html += '</div></div>';
+            }
+
+            content.innerHTML = html;
+        }
+
+        function deleteLink(linkId) {
+            if (!confirm('Delete this link? This cannot be undone.')) return;
+
+            apiRequest('/api/links/' + linkId, { method: 'DELETE' })
+                .then(function(data) {
+                    if (data.success) {
+                        showToast('Deleted', 'Link has been deleted', 'success');
+                        closeAllModals();
+                        loadAllData();
+                    } else {
+                        showToast('Error', data.error || 'Failed to delete', 'error');
+                    }
+                })
+                .catch(function() {
+                    showToast('Error', 'Failed to delete link', 'error');
+                });
+        }
+
         // ==================== UTILS ====================
         function openModal(id) {
             document.getElementById('modalOverlay').classList.add('active');
