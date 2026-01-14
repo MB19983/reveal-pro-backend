@@ -1537,14 +1537,15 @@
             options = options || {};
             var headers = {'Content-Type': 'application/json'};
             if (token) headers['Authorization'] = 'Bearer ' + token;
-            
+
             return fetch(API_BASE + endpoint, {
                 method: options.method || 'GET',
                 headers: headers,
                 body: options.body
             })
             .then(function(r) {
-                if (r.status === 401 || r.status === 403) {
+                // Only logout on 401 (unauthorized), not 403 (forbidden/limit)
+                if (r.status === 401) {
                     localStorage.removeItem('noly_token');
                     localStorage.removeItem('noly_user');
                     location.reload();
@@ -1964,14 +1965,25 @@
                     document.getElementById('newPageName').value = '';
                     document.getElementById('newPageUsername').value = '';
                     loadAllData();
-                } else { showToast('Error', data.error || 'Failed', 'error'); }
-            }).catch(function() { showToast('Error', 'Failed', 'error'); });
+                } else {
+                    console.error('Page creation failed:', data);
+                    showToast('Error', data.error || 'Creation failed - check console', 'error');
+                }
+            }).catch(function(err) {
+                console.error('Page creation error:', err);
+                showToast('Error', 'Network error - check console', 'error');
+            });
         }
 
         function createQR() {
             var url = document.getElementById('newQRUrl').value;
             var name = document.getElementById('newQRName').value;
             if (!url) { showToast('Error', 'URL is required', 'error'); return; }
+
+            // Ensure URL has protocol
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
 
             apiRequest('/api/qr', {method: 'POST', body: JSON.stringify({url: url, name: name || 'QR Code'})})
             .then(function(data) {
@@ -1982,8 +1994,14 @@
                     document.getElementById('newQRName').value = '';
                     document.getElementById('qrPreviewBox').innerHTML = '<span style="color:#999;font-size:0.85rem;">Enter URL</span>';
                     loadAllData();
-                } else { showToast('Error', data.error || 'Failed', 'error'); }
-            }).catch(function() { showToast('Error', 'Failed', 'error'); });
+                } else {
+                    console.error('QR creation failed:', data);
+                    showToast('Error', data.error || 'Creation failed - check console', 'error');
+                }
+            }).catch(function(err) {
+                console.error('QR creation error:', err);
+                showToast('Error', 'Network error - check console', 'error');
+            });
         }
         
         function upgradePlan(plan) {
