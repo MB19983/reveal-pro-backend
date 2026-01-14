@@ -1603,6 +1603,8 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
   try {
     const { name, username, bio, avatar_url, links, theme } = req.body;
 
+    console.log('Creating page:', { name, username, userId: req.userId });
+
     if (!username) {
       return res.status(400).json({ error: 'Username requis' });
     }
@@ -1613,7 +1615,7 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
     }
 
     // Check if username already exists
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('pages')
       .select('id')
       .eq('username', username.toLowerCase())
@@ -1624,23 +1626,33 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
     }
 
     // Check plan limits (free: 1 page, starter: 3, pro: unlimited)
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('plan')
       .eq('id', req.userId)
       .single();
 
-    const { count } = await supabase
+    if (userError) {
+      console.error('User fetch error:', userError.message);
+      return res.status(500).json({ error: 'Erreur utilisateur: ' + userError.message });
+    }
+
+    const { count, error: countError } = await supabase
       .from('pages')
       .select('id', { count: 'exact' })
       .eq('user_id', req.userId);
+
+    if (countError) {
+      console.error('Pages count error:', countError.message);
+      // Table might not exist - continue with 0 count
+    }
 
     const pageLimits = { free: 1, starter: 3, pro: 999999 };
     const limit = pageLimits[user?.plan] || pageLimits.free;
 
     if ((count || 0) >= limit) {
       return res.status(403).json({
-        error: 'Limite de pages atteinte',
+        error: 'Limite de pages atteinte (' + limit + ')',
         upgrade: true
       });
     }
@@ -1659,7 +1671,12 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Page insert error:', error.message, error.details, error.hint);
+      return res.status(500).json({ error: 'Erreur création: ' + error.message });
+    }
+
+    console.log('Page created:', page.id);
 
     res.json({
       success: true,
@@ -1670,8 +1687,8 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create page error:', error.message);
-    res.status(500).json({ error: 'Erreur création page' });
+    console.error('Create page error:', error.message, error.stack);
+    res.status(500).json({ error: 'Erreur serveur: ' + error.message });
   }
 });
 
@@ -1766,21 +1783,30 @@ app.get('/api/qr', authMiddleware, async (req, res) => {
       .eq('user_id', req.userId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Get QR codes DB error:', error.message);
+      return res.status(500).json({ error: 'Erreur base de données: ' + error.message });
+    }
 
     const baseUrl = process.env.BASE_URL || 'https://noly.pro';
 
-    // Get scan counts for each QR code
+    // Get scan counts for each QR code (with error handling for missing table)
     const qrWithStats = await Promise.all((qrCodes || []).map(async (qr) => {
-      const { count } = await supabase
-        .from('qr_scans')
-        .select('id', { count: 'exact' })
-        .eq('qr_id', qr.id);
+      let scans = 0;
+      try {
+        const { count, error: scanError } = await supabase
+          .from('qr_scans')
+          .select('id', { count: 'exact' })
+          .eq('qr_id', qr.id);
+        if (!scanError) scans = count || 0;
+      } catch (e) {
+        // qr_scans table might not exist yet
+      }
 
       return {
         ...qr,
         scanUrl: `${baseUrl}/qr/${qr.short_code}`,
-        scans: count || 0
+        scans: scans
       };
     }));
 
@@ -1788,7 +1814,7 @@ app.get('/api/qr', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Get QR codes error:', error.message);
-    res.status(500).json({ error: 'Erreur récupération QR codes' });
+    res.status(500).json({ error: 'Erreur: ' + error.message });
   }
 });
 
@@ -1797,32 +1823,44 @@ app.post('/api/qr', authMiddleware, async (req, res) => {
   try {
     const { name, url } = req.body;
 
+    console.log('Creating QR code:', { name, url, userId: req.userId });
+
     if (!url) {
       return res.status(400).json({ error: 'URL requis' });
     }
 
     if (!isValidUrl(url)) {
-      return res.status(400).json({ error: 'URL invalide' });
+      return res.status(400).json({ error: 'URL invalide (doit commencer par http:// ou https://)' });
     }
 
     // Check plan limits (free: 2 QR, starter: 10, pro: unlimited)
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('plan')
       .eq('id', req.userId)
       .single();
 
-    const { count } = await supabase
+    if (userError) {
+      console.error('User fetch error:', userError.message);
+      return res.status(500).json({ error: 'Erreur utilisateur: ' + userError.message });
+    }
+
+    const { count, error: countError } = await supabase
       .from('qr_codes')
       .select('id', { count: 'exact' })
       .eq('user_id', req.userId);
+
+    if (countError) {
+      console.error('QR count error:', countError.message);
+      // Table might not exist - continue with 0 count
+    }
 
     const qrLimits = { free: 2, starter: 10, pro: 999999 };
     const limit = qrLimits[user?.plan] || qrLimits.free;
 
     if ((count || 0) >= limit) {
       return res.status(403).json({
-        error: 'Limite de QR codes atteinte',
+        error: 'Limite de QR codes atteinte (' + limit + ')',
         upgrade: true
       });
     }
@@ -1841,9 +1879,14 @@ app.post('/api/qr', authMiddleware, async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('QR insert error:', error.message, error.details, error.hint);
+      return res.status(500).json({ error: 'Erreur création: ' + error.message });
+    }
 
     const baseUrl = process.env.BASE_URL || 'https://noly.pro';
+
+    console.log('QR code created:', qrCode.id);
 
     res.json({
       success: true,
@@ -1855,8 +1898,8 @@ app.post('/api/qr', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Create QR code error:', error.message);
-    res.status(500).json({ error: 'Erreur création QR code' });
+    console.error('Create QR code error:', error.message, error.stack);
+    res.status(500).json({ error: 'Erreur serveur: ' + error.message });
   }
 });
 
