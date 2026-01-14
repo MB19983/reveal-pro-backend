@@ -367,23 +367,19 @@
         
         .pro-badge { background: var(--accent); color: white; font-size: 0.65rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; }
         
-        /* QR Card */
+        /* QR Card - Grid style */
         .qr-card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 16px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            cursor: pointer;
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
             transition: all 0.2s;
         }
-        .qr-card:hover { border-color: var(--border-hover); }
-        
-        .qr-thumb { width: 60px; height: 60px; background: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .qr-thumb canvas, .qr-thumb img { width: 48px !important; height: 48px !important; }
+        .qr-card:hover { border-color: var(--purple); transform: translateY(-2px); }
+
+        .qr-thumb { display: inline-block; background: white; border-radius: 12px; padding: 12px; margin-bottom: 16px; cursor: pointer; }
+        .qr-thumb canvas, .qr-thumb img { width: 120px !important; height: 120px !important; }
         .qr-info { flex: 1; min-width: 0; }
         .qr-name { font-weight: 600; color: var(--text); }
         .qr-stats { font-size: 0.85rem; color: var(--text-secondary); }
@@ -1926,36 +1922,54 @@
         }
 
         function downloadQR(index, name) {
+            console.log('downloadQR called', index, name);
             var el = document.getElementById('qrThumb' + index);
-            if (!el) return;
-            var sourceCanvas = el.querySelector('canvas');
-            if (!sourceCanvas) {
-                showToast('Error', 'QR not ready', 'error');
+            if (!el) {
+                console.error('Element not found: qrThumb' + index);
+                showToast('Error', 'QR element not found', 'error');
                 return;
             }
 
-            // Create larger canvas with white background and padding
-            var padding = 40;
-            var size = 400;
-            var canvas = document.createElement('canvas');
-            canvas.width = size;
-            canvas.height = size;
-            var ctx = canvas.getContext('2d');
+            var sourceCanvas = el.querySelector('canvas');
+            var sourceImg = el.querySelector('img');
 
-            // White background
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, size, size);
+            if (!sourceCanvas && !sourceImg) {
+                console.error('No canvas or img in element', el.innerHTML);
+                showToast('Error', 'QR not ready - try again', 'error');
+                return;
+            }
 
-            // Draw QR code centered with padding
-            var qrSize = size - (padding * 2);
-            ctx.drawImage(sourceCanvas, padding, padding, qrSize, qrSize);
+            try {
+                // Create larger canvas with white background and padding
+                var padding = 40;
+                var size = 400;
+                var canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                var ctx = canvas.getContext('2d');
 
-            // Download
-            var link = document.createElement('a');
-            link.download = (name || 'qrcode') + '.png';
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            showToast('Downloaded!', name + '.png saved', 'success');
+                // White background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, size, size);
+
+                // Draw QR code centered with padding
+                var qrSize = size - (padding * 2);
+                var source = sourceCanvas || sourceImg;
+                ctx.drawImage(source, padding, padding, qrSize, qrSize);
+
+                // Download
+                var dataUrl = canvas.toDataURL('image/png');
+                var link = document.createElement('a');
+                link.download = (name || 'qrcode').replace(/[^a-zA-Z0-9]/g, '_') + '.png';
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast('Downloaded!', name + '.png saved', 'success');
+            } catch(err) {
+                console.error('Download error:', err);
+                showToast('Error', 'Download failed: ' + err.message, 'error');
+            }
         }
 
         function deleteQR(qrId) {
