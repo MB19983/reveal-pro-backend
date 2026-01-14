@@ -1118,7 +1118,9 @@
             pricing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
             settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
             check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>',
-            error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>'
+            error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
+            trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>',
+            drag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>'
         };
         
         // ==================== INIT ====================
@@ -1758,41 +1760,80 @@
             var page = pagesData.find(function(p) { return p.id === pageId; });
             if (!page) return;
             currentEditPage = page;
+            currentEditPage.links = currentEditPage.links || [];
 
-            var pageLinks = page.links || [];
+            var pageLinks = currentEditPage.links;
             var linksHtml = '';
             for (var i = 0; i < pageLinks.length; i++) {
                 var link = pageLinks[i];
-                linksHtml += '<div class="page-link-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
-                    '<input type="text" class="form-input" style="flex:1;" placeholder="Title" value="' + escapeHTML(link.title || '') + '" data-link-index="' + i + '" data-field="title">' +
-                    '<input type="text" class="form-input" style="flex:2;" placeholder="URL" value="' + escapeHTML(link.url || '') + '" data-link-index="' + i + '" data-field="url">' +
-                    '<button class="btn" style="padding:8px;background:var(--danger);color:white;" onclick="removePageLink(' + i + ')">' + ICONS.trash + '</button>' +
+                linksHtml += '<div class="page-link-item" style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;">' +
+                    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">' +
+                        '<div class="drag-handle" style="color:var(--text-muted);cursor:grab;width:20px;height:20px;">' + ICONS.drag + '</div>' +
+                        '<div style="flex:1;font-weight:500;">' + (link.title || 'New Link') + '</div>' +
+                        '<button class="btn" style="padding:6px 10px;background:var(--danger);color:white;border-radius:8px;" onclick="removePageLink(' + i + ')">' + ICONS.trash + '</button>' +
+                    '</div>' +
+                    '<div style="margin-bottom:10px;">' +
+                        '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:8px;" placeholder="Link Title (e.g. My Website)" value="' + escapeHTML(link.title || '') + '" data-link-index="' + i + '" data-field="title" oninput="updateLinkPreview(this)">' +
+                    '</div>' +
+                    '<div>' +
+                        '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:8px;" placeholder="URL (e.g. https://example.com)" value="' + escapeHTML(link.url || '') + '" data-link-index="' + i + '" data-field="url">' +
+                    '</div>' +
                 '</div>';
             }
 
-            var html = '<div style="padding:20px;">' +
-                '<h3 style="margin-bottom:20px;">Edit Page: @' + escapeHTML(page.username) + '</h3>' +
-                '<div class="form-group" style="margin-bottom:16px;">' +
-                    '<label style="display:block;margin-bottom:6px;font-weight:500;">Name</label>' +
-                    '<input type="text" class="form-input" id="editPageName" value="' + escapeHTML(page.name || '') + '" placeholder="Your name">' +
+            if (pageLinks.length === 0) {
+                linksHtml = '<div style="text-align:center;padding:30px;color:var(--text-muted);background:var(--bg);border-radius:12px;border:2px dashed var(--border);">' +
+                    '<div style="font-size:2rem;margin-bottom:8px;">🔗</div>' +
+                    '<div>No links yet. Add your first link!</div>' +
+                '</div>';
+            }
+
+            var pageUrl = 'https://noly.pro/@' + page.username;
+            var html = '<div style="padding:20px;max-height:80vh;overflow-y:auto;">' +
+                '<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">' +
+                    '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.25rem;font-weight:700;color:white;">' + (page.name || 'P')[0].toUpperCase() + '</div>' +
+                    '<div style="flex:1;">' +
+                        '<h3 style="margin:0;">Edit Page</h3>' +
+                        '<a href="' + pageUrl + '" target="_blank" style="color:var(--purple);font-size:0.9rem;">@' + escapeHTML(page.username) + ' ↗</a>' +
+                    '</div>' +
                 '</div>' +
-                '<div class="form-group" style="margin-bottom:16px;">' +
-                    '<label style="display:block;margin-bottom:6px;font-weight:500;">Bio</label>' +
-                    '<textarea class="form-input" id="editPageBio" rows="3" placeholder="Short bio...">' + escapeHTML(page.bio || '') + '</textarea>' +
+
+                '<div class="form-group" style="margin-bottom:20px;">' +
+                    '<label style="display:block;margin-bottom:8px;font-weight:600;">Display Name</label>' +
+                    '<input type="text" class="form-input" id="editPageName" style="padding:14px;border-radius:10px;" value="' + escapeHTML(page.name || '') + '" placeholder="Your name or brand">' +
                 '</div>' +
-                '<div class="form-group" style="margin-bottom:16px;">' +
-                    '<label style="display:block;margin-bottom:6px;font-weight:500;">Links</label>' +
+
+                '<div class="form-group" style="margin-bottom:20px;">' +
+                    '<label style="display:block;margin-bottom:8px;font-weight:600;">Bio</label>' +
+                    '<textarea class="form-input" id="editPageBio" rows="3" style="padding:14px;border-radius:10px;resize:none;" placeholder="Tell visitors about yourself...">' + escapeHTML(page.bio || '') + '</textarea>' +
+                '</div>' +
+
+                '<div class="form-group" style="margin-bottom:20px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+                        '<label style="font-weight:600;">Links</label>' +
+                        '<span style="font-size:0.85rem;color:var(--text-muted);">' + pageLinks.length + ' link' + (pageLinks.length !== 1 ? 's' : '') + '</span>' +
+                    '</div>' +
                     '<div id="pageLinksContainer">' + linksHtml + '</div>' +
-                    '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addPageLink()">+ Add Link</button>' +
+                    '<button class="btn" style="width:100%;margin-top:12px;padding:14px;background:transparent;border:2px dashed var(--purple);color:var(--purple);border-radius:12px;font-weight:600;" onclick="addPageLink()">+ Add New Link</button>' +
                 '</div>' +
-                '<div style="display:flex;gap:12px;margin-top:24px;">' +
-                    '<button class="btn btn-secondary" style="flex:1;" onclick="closeAllModals()">Cancel</button>' +
-                    '<button class="btn btn-primary" style="flex:1;" onclick="savePageChanges()">Save Changes</button>' +
+
+                '<div style="display:flex;gap:12px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">' +
+                    '<button class="btn btn-secondary" style="flex:1;padding:14px;border-radius:10px;" onclick="closeAllModals()">Cancel</button>' +
+                    '<button class="btn btn-primary" style="flex:1;padding:14px;border-radius:10px;" onclick="savePageChanges()">Save Changes</button>' +
                 '</div>' +
             '</div>';
 
             document.getElementById('linkDetailContent').innerHTML = html;
             openModal('linkDetailModal');
+        }
+
+        function updateLinkPreview(input) {
+            var item = input.closest('.page-link-item');
+            if (!item) return;
+            var titleDiv = item.querySelector('div > div:nth-child(2)');
+            if (titleDiv) {
+                titleDiv.textContent = input.value || 'New Link';
+            }
         }
 
         function addPageLink() {
@@ -1854,23 +1895,19 @@
                 return;
             }
 
-            var html = '<div class="qr-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">';
+            var html = '<div class="qr-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;">';
             for (var i = 0; i < qrData.length; i++) {
                 var qr = qrData[i];
                 var scanUrl = API_BASE + '/qr/' + qr.short_code;
-                html += '<div class="qr-card" style="background:var(--card-bg);border-radius:16px;padding:20px;border:1px solid var(--border);">' +
-                    '<div style="display:flex;gap:16px;align-items:flex-start;">' +
-                        '<div class="qr-thumb" id="qrThumb' + i + '" style="flex-shrink:0;cursor:pointer;" onclick="openQRDetail(\'' + qr.id + '\')"></div>' +
-                        '<div style="flex:1;min-width:0;">' +
-                            '<div style="font-weight:600;margin-bottom:4px;">' + escapeHTML(qr.name) + '</div>' +
-                            '<div style="font-size:0.85rem;color:var(--purple);font-weight:600;margin-bottom:8px;">' + (qr.scans || 0) + ' scans</div>' +
-                            '<div style="font-size:0.75rem;color:var(--text-muted);word-break:break-all;line-height:1.4;">' + escapeHTML(qr.original_url || '').substring(0, 50) + (qr.original_url && qr.original_url.length > 50 ? '...' : '') + '</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div style="display:flex;gap:8px;margin-top:16px;">' +
-                        '<button class="btn btn-secondary" style="flex:1;padding:10px;font-size:0.85rem;" onclick="event.stopPropagation();copyUrl(\'' + scanUrl + '\')">Copy Link</button>' +
-                        '<button class="btn btn-primary" style="flex:1;padding:10px;font-size:0.85rem;" onclick="event.stopPropagation();downloadQR(' + i + ', \'' + escapeHTML(qr.name).replace(/'/g, "\\'") + '\')">Download</button>' +
-                        '<button class="btn" style="padding:10px;background:var(--danger);color:white;" onclick="event.stopPropagation();deleteQR(\'' + qr.id + '\')">' + ICONS.trash + '</button>' +
+                html += '<div class="qr-card" style="background:var(--card-bg);border-radius:16px;padding:24px;border:1px solid var(--border);text-align:center;">' +
+                    '<div class="qr-thumb" id="qrThumb' + i + '" style="display:inline-block;cursor:pointer;padding:12px;background:white;border-radius:12px;margin-bottom:16px;" onclick="openQRDetail(\'' + qr.id + '\')"></div>' +
+                    '<div style="font-weight:600;font-size:1.1rem;margin-bottom:4px;">' + escapeHTML(qr.name) + '</div>' +
+                    '<div style="font-size:0.9rem;color:var(--purple);font-weight:600;margin-bottom:8px;">' + (qr.scans || 0) + ' scans</div>' +
+                    '<div style="font-size:0.8rem;color:var(--text-muted);word-break:break-all;line-height:1.4;margin-bottom:16px;max-height:40px;overflow:hidden;">' + escapeHTML(qr.original_url || '').substring(0, 60) + (qr.original_url && qr.original_url.length > 60 ? '...' : '') + '</div>' +
+                    '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-secondary" style="flex:1;padding:10px;font-size:0.85rem;border-radius:10px;" onclick="event.stopPropagation();copyUrl(\'' + scanUrl + '\')">Copy</button>' +
+                        '<button class="btn btn-primary" style="flex:1;padding:10px;font-size:0.85rem;border-radius:10px;" onclick="event.stopPropagation();downloadQR(' + i + ', \'' + escapeHTML(qr.name).replace(/'/g, "\\'") + '\')">Download</button>' +
+                        '<button class="btn" style="padding:10px;background:var(--danger);color:white;border-radius:10px;width:44px;" onclick="event.stopPropagation();deleteQR(\'' + qr.id + '\')">' + ICONS.trash + '</button>' +
                     '</div>' +
                 '</div>';
             }
@@ -1882,7 +1919,7 @@
                     var el = document.getElementById('qrThumb' + i);
                     if (el && typeof QRCode !== 'undefined') {
                         el.innerHTML = '';
-                        new QRCode(el, {text: API_BASE + '/qr/' + qrData[i].short_code, width: 100, height: 100});
+                        new QRCode(el, {text: API_BASE + '/qr/' + qrData[i].short_code, width: 120, height: 120});
                     }
                 }
             }, 100);
@@ -1891,16 +1928,34 @@
         function downloadQR(index, name) {
             var el = document.getElementById('qrThumb' + index);
             if (!el) return;
-            var canvas = el.querySelector('canvas');
-            if (!canvas) {
+            var sourceCanvas = el.querySelector('canvas');
+            if (!sourceCanvas) {
                 showToast('Error', 'QR not ready', 'error');
                 return;
             }
+
+            // Create larger canvas with white background and padding
+            var padding = 40;
+            var size = 400;
+            var canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            var ctx = canvas.getContext('2d');
+
+            // White background
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, size, size);
+
+            // Draw QR code centered with padding
+            var qrSize = size - (padding * 2);
+            ctx.drawImage(sourceCanvas, padding, padding, qrSize, qrSize);
+
+            // Download
             var link = document.createElement('a');
             link.download = (name || 'qrcode') + '.png';
             link.href = canvas.toDataURL('image/png');
             link.click();
-            showToast('Downloaded!', name + '.png', 'success');
+            showToast('Downloaded!', name + '.png saved', 'success');
         }
 
         function deleteQR(qrId) {
