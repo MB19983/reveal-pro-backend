@@ -1698,62 +1698,250 @@
         function renderPages() {
             var content = document.getElementById('appContent');
             var isPro = userPlan !== 'free';
-            
+
             if (!isPro) {
                 content.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.page + '</div><div class="empty-title">Smart Pages</div><div class="empty-text">Create beautiful link-in-bio pages with tracking. Upgrade to PRO to unlock.</div><button class="btn btn-primary" style="width:auto;padding:12px 24px;" onclick="switchView(\'pricing\')">Upgrade to PRO</button></div>';
                 return;
             }
-            
+
             if (pagesData.length === 0) {
                 content.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.page + '</div><div class="empty-title">No pages yet</div><div class="empty-text">Create your first Smart Page</div><button class="btn btn-primary" style="width:auto;padding:12px 24px;" onclick="openModal(\'pageModal\')">Create Page</button></div>';
                 return;
             }
-            
-            var html = '';
+
+            var html = '<div class="pages-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;">';
             for (var i = 0; i < pagesData.length; i++) {
                 var page = pagesData[i];
-                html += '<div class="page-card" onclick="copyUrl(\'' + API_BASE + '/@' + page.username + '\')">' +
-                    '<div class="page-header">' +
-                        '<div class="page-avatar">' + (page.name || 'P')[0].toUpperCase() + '</div>' +
-                        '<div class="page-info"><div class="page-name">' + escapeHTML(page.name) + '</div><div class="page-url">' + API_BASE + '/@' + page.username + '</div></div>' +
-                        '<span class="pro-badge">PRO</span>' +
+                var pageUrl = 'https://noly.pro/@' + page.username;
+                var linksCount = (page.links && page.links.length) || 0;
+                html += '<div class="page-card" style="background:var(--card-bg);border-radius:16px;padding:20px;border:1px solid var(--border);">' +
+                    '<div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;">' +
+                        '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.25rem;font-weight:700;color:white;">' + (page.name || 'P')[0].toUpperCase() + '</div>' +
+                        '<div style="flex:1;min-width:0;">' +
+                            '<div style="font-weight:600;font-size:1.1rem;margin-bottom:2px;">' + escapeHTML(page.name) + '</div>' +
+                            '<div style="color:var(--purple);font-size:0.9rem;">@' + escapeHTML(page.username) + '</div>' +
+                        '</div>' +
+                        '<span class="pro-badge" style="background:var(--purple);color:white;padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;">PRO</span>' +
+                    '</div>' +
+                    '<div style="color:var(--text-muted);font-size:0.9rem;margin-bottom:12px;">' + (page.bio || 'No bio yet') + '</div>' +
+                    '<div style="display:flex;gap:16px;margin-bottom:16px;">' +
+                        '<div style="text-align:center;"><div style="font-weight:600;color:var(--purple);">' + linksCount + '</div><div style="font-size:0.75rem;color:var(--text-muted);">Links</div></div>' +
+                        '<div style="text-align:center;"><div style="font-weight:600;color:var(--purple);">' + (page.total_views || 0) + '</div><div style="font-size:0.75rem;color:var(--text-muted);">Views</div></div>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-secondary" style="flex:1;padding:10px;font-size:0.85rem;" onclick="window.open(\'' + pageUrl + '\', \'_blank\')">View Page</button>' +
+                        '<button class="btn btn-primary" style="flex:1;padding:10px;font-size:0.85rem;" onclick="openPageEditor(\'' + page.id + '\')">Edit</button>' +
+                        '<button class="btn" style="padding:10px;background:var(--danger);color:white;" onclick="deletePage(\'' + page.id + '\')">' + ICONS.trash + '</button>' +
                     '</div>' +
                 '</div>';
             }
+            html += '</div>';
             content.innerHTML = html;
+        }
+
+        function deletePage(pageId) {
+            if (!confirm('Delete this page?')) return;
+            apiRequest('/api/pages/' + pageId, {method: 'DELETE'})
+                .then(function(data) {
+                    if (data.success) {
+                        showToast('Deleted', 'Page removed', 'success');
+                        loadAllData();
+                    } else {
+                        showToast('Error', data.error || 'Failed', 'error');
+                    }
+                });
+        }
+
+        var currentEditPage = null;
+
+        function openPageEditor(pageId) {
+            var page = pagesData.find(function(p) { return p.id === pageId; });
+            if (!page) return;
+            currentEditPage = page;
+
+            var pageLinks = page.links || [];
+            var linksHtml = '';
+            for (var i = 0; i < pageLinks.length; i++) {
+                var link = pageLinks[i];
+                linksHtml += '<div class="page-link-item" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
+                    '<input type="text" class="form-input" style="flex:1;" placeholder="Title" value="' + escapeHTML(link.title || '') + '" data-link-index="' + i + '" data-field="title">' +
+                    '<input type="text" class="form-input" style="flex:2;" placeholder="URL" value="' + escapeHTML(link.url || '') + '" data-link-index="' + i + '" data-field="url">' +
+                    '<button class="btn" style="padding:8px;background:var(--danger);color:white;" onclick="removePageLink(' + i + ')">' + ICONS.trash + '</button>' +
+                '</div>';
+            }
+
+            var html = '<div style="padding:20px;">' +
+                '<h3 style="margin-bottom:20px;">Edit Page: @' + escapeHTML(page.username) + '</h3>' +
+                '<div class="form-group" style="margin-bottom:16px;">' +
+                    '<label style="display:block;margin-bottom:6px;font-weight:500;">Name</label>' +
+                    '<input type="text" class="form-input" id="editPageName" value="' + escapeHTML(page.name || '') + '" placeholder="Your name">' +
+                '</div>' +
+                '<div class="form-group" style="margin-bottom:16px;">' +
+                    '<label style="display:block;margin-bottom:6px;font-weight:500;">Bio</label>' +
+                    '<textarea class="form-input" id="editPageBio" rows="3" placeholder="Short bio...">' + escapeHTML(page.bio || '') + '</textarea>' +
+                '</div>' +
+                '<div class="form-group" style="margin-bottom:16px;">' +
+                    '<label style="display:block;margin-bottom:6px;font-weight:500;">Links</label>' +
+                    '<div id="pageLinksContainer">' + linksHtml + '</div>' +
+                    '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="addPageLink()">+ Add Link</button>' +
+                '</div>' +
+                '<div style="display:flex;gap:12px;margin-top:24px;">' +
+                    '<button class="btn btn-secondary" style="flex:1;" onclick="closeAllModals()">Cancel</button>' +
+                    '<button class="btn btn-primary" style="flex:1;" onclick="savePageChanges()">Save Changes</button>' +
+                '</div>' +
+            '</div>';
+
+            document.getElementById('linkDetailContent').innerHTML = html;
+            openModal('linkDetailModal');
+        }
+
+        function addPageLink() {
+            if (!currentEditPage) return;
+            currentEditPage.links = currentEditPage.links || [];
+            currentEditPage.links.push({title: '', url: ''});
+            openPageEditor(currentEditPage.id);
+        }
+
+        function removePageLink(index) {
+            if (!currentEditPage || !currentEditPage.links) return;
+            currentEditPage.links.splice(index, 1);
+            openPageEditor(currentEditPage.id);
+        }
+
+        function savePageChanges() {
+            if (!currentEditPage) return;
+
+            var name = document.getElementById('editPageName').value;
+            var bio = document.getElementById('editPageBio').value;
+
+            // Collect links from inputs
+            var links = [];
+            var container = document.getElementById('pageLinksContainer');
+            var items = container.querySelectorAll('.page-link-item');
+            items.forEach(function(item) {
+                var titleInput = item.querySelector('[data-field="title"]');
+                var urlInput = item.querySelector('[data-field="url"]');
+                if (titleInput && urlInput && (titleInput.value || urlInput.value)) {
+                    links.push({title: titleInput.value, url: urlInput.value});
+                }
+            });
+
+            apiRequest('/api/pages/' + currentEditPage.id, {
+                method: 'PUT',
+                body: JSON.stringify({name: name, bio: bio, links: links})
+            }).then(function(data) {
+                if (data.success) {
+                    showToast('Saved!', 'Page updated', 'success');
+                    closeAllModals();
+                    loadAllData();
+                } else {
+                    showToast('Error', data.error || 'Failed', 'error');
+                }
+            });
         }
         
         function renderQR() {
             var content = document.getElementById('appContent');
             var isPro = userPlan !== 'free';
-            
+
             if (!isPro) {
                 content.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.qr + '</div><div class="empty-title">QR Codes</div><div class="empty-text">Create trackable QR codes. Upgrade to PRO to unlock.</div><button class="btn btn-primary" style="width:auto;padding:12px 24px;" onclick="switchView(\'pricing\')">Upgrade to PRO</button></div>';
                 return;
             }
-            
+
             if (qrData.length === 0) {
                 content.innerHTML = '<div class="empty-state"><div class="empty-icon">' + ICONS.qr + '</div><div class="empty-title">No QR codes yet</div><div class="empty-text">Create your first QR code</div><button class="btn btn-primary" style="width:auto;padding:12px 24px;" onclick="openModal(\'qrModal\')">Create QR Code</button></div>';
                 return;
             }
-            
-            var html = '';
+
+            var html = '<div class="qr-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">';
             for (var i = 0; i < qrData.length; i++) {
                 var qr = qrData[i];
-                html += '<div class="qr-card" onclick="copyUrl(\'' + API_BASE + '/qr/' + qr.short_code + '\')">' +
-                    '<div class="qr-thumb" id="qrThumb' + i + '"></div>' +
-                    '<div class="qr-info"><div class="qr-name">' + escapeHTML(qr.name) + '</div><div class="qr-stats"><span>' + (qr.scans || 0) + '</span> scans</div></div>' +
+                var scanUrl = API_BASE + '/qr/' + qr.short_code;
+                html += '<div class="qr-card" style="background:var(--card-bg);border-radius:16px;padding:20px;border:1px solid var(--border);">' +
+                    '<div style="display:flex;gap:16px;align-items:flex-start;">' +
+                        '<div class="qr-thumb" id="qrThumb' + i + '" style="flex-shrink:0;cursor:pointer;" onclick="openQRDetail(\'' + qr.id + '\')"></div>' +
+                        '<div style="flex:1;min-width:0;">' +
+                            '<div style="font-weight:600;margin-bottom:4px;">' + escapeHTML(qr.name) + '</div>' +
+                            '<div style="font-size:0.85rem;color:var(--purple);font-weight:600;margin-bottom:8px;">' + (qr.scans || 0) + ' scans</div>' +
+                            '<div style="font-size:0.75rem;color:var(--text-muted);word-break:break-all;line-height:1.4;">' + escapeHTML(qr.original_url || '').substring(0, 50) + (qr.original_url && qr.original_url.length > 50 ? '...' : '') + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px;margin-top:16px;">' +
+                        '<button class="btn btn-secondary" style="flex:1;padding:10px;font-size:0.85rem;" onclick="event.stopPropagation();copyUrl(\'' + scanUrl + '\')">Copy Link</button>' +
+                        '<button class="btn btn-primary" style="flex:1;padding:10px;font-size:0.85rem;" onclick="event.stopPropagation();downloadQR(' + i + ', \'' + escapeHTML(qr.name).replace(/'/g, "\\'") + '\')">Download</button>' +
+                        '<button class="btn" style="padding:10px;background:var(--danger);color:white;" onclick="event.stopPropagation();deleteQR(\'' + qr.id + '\')">' + ICONS.trash + '</button>' +
+                    '</div>' +
                 '</div>';
             }
+            html += '</div>';
             content.innerHTML = html;
-            
+
             setTimeout(function() {
                 for (var i = 0; i < qrData.length; i++) {
                     var el = document.getElementById('qrThumb' + i);
                     if (el && typeof QRCode !== 'undefined') {
                         el.innerHTML = '';
-                        new QRCode(el, {text: API_BASE + '/qr/' + qrData[i].short_code, width: 48, height: 48});
+                        new QRCode(el, {text: API_BASE + '/qr/' + qrData[i].short_code, width: 100, height: 100});
                     }
+                }
+            }, 100);
+        }
+
+        function downloadQR(index, name) {
+            var el = document.getElementById('qrThumb' + index);
+            if (!el) return;
+            var canvas = el.querySelector('canvas');
+            if (!canvas) {
+                showToast('Error', 'QR not ready', 'error');
+                return;
+            }
+            var link = document.createElement('a');
+            link.download = (name || 'qrcode') + '.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast('Downloaded!', name + '.png', 'success');
+        }
+
+        function deleteQR(qrId) {
+            if (!confirm('Delete this QR code?')) return;
+            apiRequest('/api/qr/' + qrId, {method: 'DELETE'})
+                .then(function(data) {
+                    if (data.success) {
+                        showToast('Deleted', 'QR code removed', 'success');
+                        loadAllData();
+                    } else {
+                        showToast('Error', data.error || 'Failed', 'error');
+                    }
+                });
+        }
+
+        function openQRDetail(qrId) {
+            var qr = qrData.find(function(q) { return q.id === qrId; });
+            if (!qr) return;
+
+            var scanUrl = API_BASE + '/qr/' + qr.short_code;
+            var html = '<div style="text-align:center;padding:20px;">' +
+                '<div id="qrDetailImage" style="margin:0 auto 20px;width:200px;height:200px;"></div>' +
+                '<h3 style="margin-bottom:8px;">' + escapeHTML(qr.name) + '</h3>' +
+                '<p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:16px;word-break:break-all;">' + escapeHTML(qr.original_url) + '</p>' +
+                '<div class="analytics-grid" style="margin-bottom:20px;">' +
+                    '<div class="analytics-card"><div class="analytics-value purple">' + (qr.scans || 0) + '</div><div class="analytics-label">Total Scans</div></div>' +
+                '</div>' +
+                '<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px;">Scan URL: ' + scanUrl + '</p>' +
+                '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
+                    '<button class="btn btn-secondary" onclick="copyUrl(\'' + scanUrl + '\')">Copy Link</button>' +
+                    '<button class="btn btn-primary" onclick="window.open(\'' + escapeHTML(qr.original_url) + '\', \'_blank\')">Open URL</button>' +
+                '</div>' +
+            '</div>';
+
+            document.getElementById('linkDetailContent').innerHTML = html;
+            openModal('linkDetailModal');
+
+            setTimeout(function() {
+                var el = document.getElementById('qrDetailImage');
+                if (el && typeof QRCode !== 'undefined') {
+                    new QRCode(el, {text: scanUrl, width: 200, height: 200});
                 }
             }, 100);
         }
