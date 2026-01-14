@@ -1714,6 +1714,110 @@ app.get('/api/pages/view/:username', async (req, res) => {
   }
 });
 
+// Public Smart Page HTML - displays the user's page like Linktree
+app.get('/@:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const { data: page, error } = await supabase
+      .from('pages')
+      .select('id, username, name, bio, avatar_url, links, theme')
+      .eq('username', username.toLowerCase())
+      .single();
+
+    if (error || !page) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html><head><title>Page Not Found - Noly</title>
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <style>body{font-family:system-ui;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+        .box{text-align:center;padding:40px;}.title{font-size:2rem;margin-bottom:8px;}.text{color:#888;}</style>
+        </head><body><div class="box"><div class="title">Page not found</div><div class="text">This page doesn't exist.</div></div></body></html>
+      `);
+    }
+
+    // Increment view count
+    await supabase.from('pages').update({ total_views: (page.total_views || 0) + 1 }).eq('id', page.id);
+
+    // Track page view
+    await supabase.from('page_views').insert({
+      page_id: page.id,
+      ip_address: req.ip,
+      user_agent: req.get('User-Agent'),
+      referrer: req.get('Referer')
+    }).catch(() => {});
+
+    const links = page.links || [];
+    const linksHtml = links.map(link => `
+      <a href="${link.url}" target="_blank" rel="noopener" class="link-btn">
+        ${escapeHtml(link.title || link.url)}
+      </a>
+    `).join('');
+
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${escapeHtml(page.name || page.username)} - Noly</title>
+  <meta name="description" content="${escapeHtml(page.bio || 'Check out my links')}">
+  <meta property="og:title" content="${escapeHtml(page.name || page.username)}">
+  <meta property="og:description" content="${escapeHtml(page.bio || 'Check out my links')}">
+  <link rel="icon" href="https://noly.pro/favicon.ico">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f0f23 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px;}
+    .container{width:100%;max-width:480px;text-align:center;}
+    .avatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:white;margin:0 auto 16px;border:3px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(168,85,247,0.3);}
+    .avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;}
+    .name{font-size:1.5rem;font-weight:700;color:white;margin-bottom:8px;}
+    .bio{color:rgba(255,255,255,0.7);font-size:1rem;line-height:1.5;margin-bottom:32px;max-width:400px;margin-left:auto;margin-right:auto;}
+    .links{display:flex;flex-direction:column;gap:12px;}
+    .link-btn{display:block;padding:16px 24px;background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;text-decoration:none;font-weight:500;font-size:1rem;transition:all 0.2s ease;text-align:center;}
+    .link-btn:hover{background:rgba(168,85,247,0.3);border-color:rgba(168,85,247,0.5);transform:translateY(-2px);box-shadow:0 8px 24px rgba(168,85,247,0.2);}
+    .footer{margin-top:48px;color:rgba(255,255,255,0.4);font-size:0.85rem;}
+    .footer a{color:rgba(168,85,247,0.8);text-decoration:none;}
+    .footer a:hover{color:#a855f7;}
+    .no-links{color:rgba(255,255,255,0.5);padding:32px;background:rgba(255,255,255,0.05);border-radius:12px;border:1px dashed rgba(255,255,255,0.1);}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="avatar">
+      ${page.avatar_url ? `<img src="${escapeHtml(page.avatar_url)}" alt="${escapeHtml(page.name)}">` : (page.name || 'U')[0].toUpperCase()}
+    </div>
+    <h1 class="name">${escapeHtml(page.name || page.username)}</h1>
+    <p class="bio">${escapeHtml(page.bio || '')}</p>
+    <div class="links">
+      ${links.length > 0 ? linksHtml : '<div class="no-links">No links yet</div>'}
+    </div>
+    <div class="footer">
+      Powered by <a href="https://noly.pro" target="_blank">Noly</a>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    res.send(html);
+
+  } catch (error) {
+    console.error('Smart page error:', error);
+    res.status(500).send('Error loading page');
+  }
+});
+
+// Helper function to escape HTML
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Update a page
 app.put('/api/pages/:pageId', authMiddleware, async (req, res) => {
   try {
