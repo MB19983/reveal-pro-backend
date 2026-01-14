@@ -1258,26 +1258,29 @@
         }
         
         function loadAllData() {
-            apiRequest('/api/stats').then(function(stats) {
-                window.statsData = stats;
+            apiRequest('/api/stats').then(function(data) {
+                window.statsData = data || {};
                 if (currentView === 'dashboard') renderDashboard();
             }).catch(function() {});
-            
-            apiRequest('/api/links').then(function(links) {
-                linksData = links || [];
+
+            apiRequest('/api/links').then(function(data) {
+                // API returns {success: true, links: [...]} - extract the links array
+                linksData = (data && data.links) ? data.links : [];
                 if (currentView === 'dashboard' || currentView === 'links') {
                     if (currentView === 'dashboard') renderDashboard();
                     else renderLinks();
                 }
             }).catch(function() { linksData = []; });
-            
-            apiRequest('/api/pages').then(function(pages) {
-                pagesData = pages || [];
+
+            apiRequest('/api/pages').then(function(data) {
+                // API returns {success: true, pages: [...]} - extract the pages array
+                pagesData = (data && data.pages) ? data.pages : [];
                 if (currentView === 'pages') renderPages();
             }).catch(function() { pagesData = []; });
-            
-            apiRequest('/api/qr').then(function(qrs) {
-                qrData = qrs || [];
+
+            apiRequest('/api/qr').then(function(data) {
+                // API returns {success: true, qrs: [...]} - extract the qrs array
+                qrData = (data && data.qrs) ? data.qrs : [];
                 if (currentView === 'qr') renderQR();
             }).catch(function() { qrData = []; });
         }
