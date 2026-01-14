@@ -734,7 +734,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id, email_alerts')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id, notify_email')
       .eq('id', req.userId)
       .single();
     
@@ -766,7 +766,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
-    const { name, whatsapp, click_threshold, email_alerts } = req.body;
+    const { name, whatsapp, click_threshold, notify_email } = req.body;
 
     const { data: currentUser } = await supabase
       .from('users')
@@ -791,15 +791,15 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
     }
 
     // Email alerts toggle
-    if (email_alerts !== undefined) {
-      updates.email_alerts = !!email_alerts;
+    if (notify_email !== undefined) {
+      updates.notify_email = !!notify_email;
     }
 
     const { data: user, error } = await supabase
       .from('users')
       .update(updates)
       .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, email_alerts')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, notify_email')
       .single();
 
     if (error) throw error;

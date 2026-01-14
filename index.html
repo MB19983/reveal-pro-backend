@@ -1836,7 +1836,7 @@
                         '<div class="settings-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg></div>' +
                         '<div class="settings-item-info"><div class="settings-item-title">Email Alerts</div><div class="settings-item-desc">Get notified by email</div></div>' +
                     '</div>' +
-                    '<div class="toggle' + (user.email_alerts !== false ? ' active' : '') + '" id="toggleEmail"></div>' +
+                    '<div class="toggle' + (user.notify_email !== false ? ' active' : '') + '" id="toggleEmail"></div>' +
                 '</div>' +
                 '<div class="settings-item' + (isPro ? '' : ' disabled') + '">' +
                     '<div class="settings-item-left">' +
@@ -1866,10 +1866,10 @@
                     // Save to backend
                     apiRequest('/api/auth/settings', {
                         method: 'PUT',
-                        body: JSON.stringify({ email_alerts: newValue })
+                        body: JSON.stringify({ notify_email: newValue })
                     }).then(function(data) {
                         if (data.success && data.user) {
-                            user.email_alerts = data.user.email_alerts;
+                            user.notify_email = data.user.notify_email;
                             localStorage.setItem('noly_user', JSON.stringify(user));
                             showToast('Saved', 'Email alerts ' + (newValue ? 'enabled' : 'disabled'), 'success');
                         }
