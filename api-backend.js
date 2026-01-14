@@ -734,7 +734,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id, notify_email')
       .eq('id', req.userId)
       .single();
     
@@ -766,22 +766,22 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
-    const { name, whatsapp, click_threshold } = req.body;
-    
+    const { name, whatsapp, click_threshold, notify_email } = req.body;
+
     const { data: currentUser } = await supabase
       .from('users')
       .select('plan')
       .eq('id', req.userId)
       .single();
-    
+
     const updates = {};
     if (name !== undefined) updates.name = name.substring(0, 100); // Limit name length
-    
+
     // Only Pro users can save WhatsApp
     if (whatsapp !== undefined && currentUser?.plan === 'pro') {
       updates.whatsapp = whatsapp;
     }
-    
+
     // Allow custom click threshold (1-100)
     if (click_threshold !== undefined) {
       const threshold = parseInt(click_threshold);
@@ -789,18 +789,23 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
         updates.click_threshold = threshold;
       }
     }
-    
+
+    // Email alerts toggle
+    if (notify_email !== undefined) {
+      updates.notify_email = !!notify_email;
+    }
+
     const { data: user, error } = await supabase
       .from('users')
       .update(updates)
       .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, notify_email')
       .single();
-    
+
     if (error) throw error;
-    
+
     res.json({ success: true, user });
-    
+
   } catch (error) {
     res.status(500).json({ error: 'Erreur mise à jour' });
   }
@@ -1036,6 +1041,92 @@ app.get('/api/stripe/status', authMiddleware, async (req, res) => {
     
   } catch (error) {
     res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// ============ STATS ENDPOINT ============
+
+app.get('/api/stats', authMiddleware, async (req, res) => {
+  try {
+    // Get all links for this user
+    const { data: links, error: linksError } = await supabase
+      .from('links')
+      .select('id, click_threshold')
+      .eq('user_id', req.userId);
+
+    if (linksError) throw linksError;
+
+    const linkIds = (links || []).map(l => l.id);
+    const totalLinks = linkIds.length;
+
+    if (linkIds.length === 0) {
+      return res.json({
+        success: true,
+        total_links: 0,
+        total_clicks: 0,
+        hot_leads: 0,
+        total_scans: 0
+      });
+    }
+
+    // Get all clicks for user's links
+    const { data: clicks, error: clicksError } = await supabase
+      .from('clicks')
+      .select('link_id, is_bot')
+      .in('link_id', linkIds);
+
+    if (clicksError) throw clicksError;
+
+    // Calculate total human clicks
+    const humanClicks = (clicks || []).filter(c => !c.is_bot);
+    const totalClicks = humanClicks.length;
+
+    // Calculate hot leads (links that reached their click threshold)
+    const clicksByLink = {};
+    humanClicks.forEach(click => {
+      clicksByLink[click.link_id] = (clicksByLink[click.link_id] || 0) + 1;
+    });
+
+    let hotLeads = 0;
+    links.forEach(link => {
+      const linkClicks = clicksByLink[link.id] || 0;
+      const threshold = link.click_threshold || 5;
+      if (linkClicks >= threshold) {
+        hotLeads++;
+      }
+    });
+
+    // Get QR scans count (if QR codes table exists)
+    let totalScans = 0;
+    try {
+      const { data: qrCodes } = await supabase
+        .from('qr_codes')
+        .select('id')
+        .eq('user_id', req.userId);
+
+      if (qrCodes && qrCodes.length > 0) {
+        const qrIds = qrCodes.map(q => q.id);
+        const { count } = await supabase
+          .from('qr_scans')
+          .select('id', { count: 'exact' })
+          .in('qr_id', qrIds);
+        totalScans = count || 0;
+      }
+    } catch (e) {
+      // QR tables might not exist yet, ignore error
+    }
+
+    res.json({
+      success: true,
+      total_links: totalLinks,
+      total_clicks: totalClicks,
+      hot_leads: hotLeads,
+      total_scans: totalScans
+    });
+
+  } catch (error) {
+    console.error('Stats error:', error.message);
+    res.status(500).json({ error: 'Erreur statistiques' });
   }
 });
 
@@ -1457,12 +1548,12 @@ app.put('/api/links/:linkId/threshold', authMiddleware, async (req, res) => {
   try {
     const { linkId } = req.params;
     const { clickThreshold } = req.body;
-    
+
     const threshold = parseInt(clickThreshold);
     if (isNaN(threshold) || threshold < 1 || threshold > 100) {
       return res.status(400).json({ error: 'Seuil invalide (1-100)' });
     }
-    
+
     const { data: link, error } = await supabase
       .from('links')
       .update({ click_threshold: threshold })
@@ -1470,18 +1561,375 @@ app.put('/api/links/:linkId/threshold', authMiddleware, async (req, res) => {
       .eq('user_id', req.userId)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     res.json({ success: true, clickThreshold: link.click_threshold });
-    
+
   } catch (error) {
     console.error('Update threshold error');
     res.status(500).json({ error: 'Erreur' });
   }
 });
 
+// ============ PAGES ENDPOINTS (Smart Pages / Bio Links) ============
+
+// Get all pages for user
+app.get('/api/pages', authMiddleware, async (req, res) => {
+  try {
+    const { data: pages, error } = await supabase
+      .from('pages')
+      .select('*')
+      .eq('user_id', req.userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const pagesWithUrl = (pages || []).map(page => ({
+      ...page,
+      pageUrl: `https://noly.pro/@${page.username}`
+    }));
+
+    res.json({ success: true, pages: pagesWithUrl });
+
+  } catch (error) {
+    console.error('Get pages error:', error.message);
+    res.status(500).json({ error: 'Erreur récupération pages' });
+  }
+});
+
+// Create a new page
+app.post('/api/pages', authMiddleware, async (req, res) => {
+  try {
+    const { name, username, bio, avatar_url, links, theme } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ error: 'Username requis' });
+    }
+
+    // Validate username format (alphanumeric and underscores only)
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+      return res.status(400).json({ error: 'Username invalide (3-30 caractères, lettres, chiffres et _ uniquement)' });
+    }
+
+    // Check if username already exists
+    const { data: existing } = await supabase
+      .from('pages')
+      .select('id')
+      .eq('username', username.toLowerCase())
+      .single();
+
+    if (existing) {
+      return res.status(400).json({ error: 'Ce username est déjà pris' });
+    }
+
+    // Check plan limits (free: 1 page, starter: 3, pro: unlimited)
+    const { data: user } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', req.userId)
+      .single();
+
+    const { count } = await supabase
+      .from('pages')
+      .select('id', { count: 'exact' })
+      .eq('user_id', req.userId);
+
+    const pageLimits = { free: 1, starter: 3, pro: 999999 };
+    const limit = pageLimits[user?.plan] || pageLimits.free;
+
+    if ((count || 0) >= limit) {
+      return res.status(403).json({
+        error: 'Limite de pages atteinte',
+        upgrade: true
+      });
+    }
+
+    const { data: page, error } = await supabase
+      .from('pages')
+      .insert({
+        user_id: req.userId,
+        username: username.toLowerCase(),
+        name: name || username,
+        bio: bio || '',
+        avatar_url: avatar_url || '',
+        links: links || [],
+        theme: theme || 'default'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      page: {
+        ...page,
+        pageUrl: `https://noly.pro/@${page.username}`
+      }
+    });
+
+  } catch (error) {
+    console.error('Create page error:', error.message);
+    res.status(500).json({ error: 'Erreur création page' });
+  }
+});
+
+// Get single page (public - for viewing)
+app.get('/api/pages/view/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const { data: page, error } = await supabase
+      .from('pages')
+      .select('username, name, bio, avatar_url, links, theme')
+      .eq('username', username.toLowerCase())
+      .single();
+
+    if (error || !page) {
+      return res.status(404).json({ error: 'Page non trouvée' });
+    }
+
+    res.json({ success: true, page });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// Update a page
+app.put('/api/pages/:pageId', authMiddleware, async (req, res) => {
+  try {
+    const { pageId } = req.params;
+    const { name, bio, avatar_url, links, theme } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name.substring(0, 100);
+    if (bio !== undefined) updates.bio = bio.substring(0, 500);
+    if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+    if (links !== undefined) updates.links = links;
+    if (theme !== undefined) updates.theme = theme;
+    updates.updated_at = new Date().toISOString();
+
+    const { data: page, error } = await supabase
+      .from('pages')
+      .update(updates)
+      .eq('id', pageId)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      page: {
+        ...page,
+        pageUrl: `https://noly.pro/@${page.username}`
+      }
+    });
+
+  } catch (error) {
+    console.error('Update page error:', error.message);
+    res.status(500).json({ error: 'Erreur mise à jour' });
+  }
+});
+
+// Delete a page
+app.delete('/api/pages/:pageId', authMiddleware, async (req, res) => {
+  try {
+    const { pageId } = req.params;
+
+    const { error } = await supabase
+      .from('pages')
+      .delete()
+      .eq('id', pageId)
+      .eq('user_id', req.userId);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur suppression' });
+  }
+});
+
+// ============ QR CODES ENDPOINTS ============
+
+// Get all QR codes for user
+app.get('/api/qr', authMiddleware, async (req, res) => {
+  try {
+    const { data: qrCodes, error } = await supabase
+      .from('qr_codes')
+      .select('*')
+      .eq('user_id', req.userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
+
+    // Get scan counts for each QR code
+    const qrWithStats = await Promise.all((qrCodes || []).map(async (qr) => {
+      const { count } = await supabase
+        .from('qr_scans')
+        .select('id', { count: 'exact' })
+        .eq('qr_id', qr.id);
+
+      return {
+        ...qr,
+        scanUrl: `${baseUrl}/qr/${qr.short_code}`,
+        scans: count || 0
+      };
+    }));
+
+    res.json({ success: true, qrCodes: qrWithStats });
+
+  } catch (error) {
+    console.error('Get QR codes error:', error.message);
+    res.status(500).json({ error: 'Erreur récupération QR codes' });
+  }
+});
+
+// Create a new QR code
+app.post('/api/qr', authMiddleware, async (req, res) => {
+  try {
+    const { name, url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'URL requis' });
+    }
+
+    if (!isValidUrl(url)) {
+      return res.status(400).json({ error: 'URL invalide' });
+    }
+
+    // Check plan limits (free: 2 QR, starter: 10, pro: unlimited)
+    const { data: user } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', req.userId)
+      .single();
+
+    const { count } = await supabase
+      .from('qr_codes')
+      .select('id', { count: 'exact' })
+      .eq('user_id', req.userId);
+
+    const qrLimits = { free: 2, starter: 10, pro: 999999 };
+    const limit = qrLimits[user?.plan] || qrLimits.free;
+
+    if ((count || 0) >= limit) {
+      return res.status(403).json({
+        error: 'Limite de QR codes atteinte',
+        upgrade: true
+      });
+    }
+
+    // Generate unique short code for QR
+    const shortCode = 'qr-' + generateShortCode();
+
+    const { data: qrCode, error } = await supabase
+      .from('qr_codes')
+      .insert({
+        user_id: req.userId,
+        original_url: url,
+        short_code: shortCode,
+        name: name || 'QR Code'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const baseUrl = process.env.BASE_URL || 'https://noly.pro';
+
+    res.json({
+      success: true,
+      qrCode: {
+        ...qrCode,
+        scanUrl: `${baseUrl}/qr/${qrCode.short_code}`,
+        scans: 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Create QR code error:', error.message);
+    res.status(500).json({ error: 'Erreur création QR code' });
+  }
+});
+
+// Delete a QR code
+app.delete('/api/qr/:qrId', authMiddleware, async (req, res) => {
+  try {
+    const { qrId } = req.params;
+
+    // Delete associated scans first
+    await supabase.from('qr_scans').delete().eq('qr_id', qrId);
+
+    const { error } = await supabase
+      .from('qr_codes')
+      .delete()
+      .eq('id', qrId)
+      .eq('user_id', req.userId);
+
+    if (error) throw error;
+
+    res.json({ success: true });
+
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur suppression' });
+  }
+});
+
 // ============ TRACKING ENDPOINT ============
+
+// QR Code scan tracking: noly.pro/qr/:shortCode
+app.get('/qr/:shortCode', async (req, res) => {
+  try {
+    const { shortCode } = req.params;
+
+    const { data: qrCode, error } = await supabase
+      .from('qr_codes')
+      .select('*')
+      .eq('short_code', shortCode)
+      .single();
+
+    if (error || !qrCode) {
+      return res.status(404).send('QR Code non trouvé');
+    }
+
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    const userAgent = req.headers['user-agent'] || '';
+    const referrer = req.headers['referer'] || 'direct';
+
+    const deviceInfo = extractDeviceInfo(userAgent);
+    const geoInfo = getGeolocation(ip);
+    const botInfo = detectBot(userAgent);
+
+    // Record scan
+    await supabase.from('qr_scans').insert({
+      qr_id: qrCode.id,
+      ip_address: ip,
+      country: geoInfo.country,
+      city: geoInfo.city,
+      device_type: deviceInfo.deviceType,
+      device_model: deviceInfo.deviceModel,
+      os: deviceInfo.os,
+      browser: deviceInfo.browser,
+      referrer,
+      user_agent: userAgent.substring(0, 500),
+      is_bot: botInfo.isBot
+    });
+
+    res.redirect(302, qrCode.original_url);
+
+  } catch (error) {
+    console.error('QR scan error:', error.message);
+    res.status(500).send('Erreur');
+  }
+});
 
 // New short format: noly.pro/slug
 app.get('/:shortCode', async (req, res) => {
