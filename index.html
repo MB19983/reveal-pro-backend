@@ -1714,7 +1714,7 @@
             var html = '<div class="pages-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;">';
             for (var i = 0; i < pagesData.length; i++) {
                 var page = pagesData[i];
-                var pageUrl = 'https://noly.pro/@' + page.username;
+                var pageUrl = API_BASE + '/@' + page.username;
                 var linksCount = (page.links && page.links.length) || 0;
                 html += '<div class="page-card" style="background:var(--card-bg);border-radius:16px;padding:20px;border:1px solid var(--border);">' +
                     '<div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;">' +
@@ -1788,7 +1788,7 @@
                 '</div>';
             }
 
-            var pageUrl = 'https://noly.pro/@' + page.username;
+            var pageUrl = API_BASE + '/@' + page.username;
             var html = '<div style="padding:20px;max-height:80vh;overflow-y:auto;">' +
                 '<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">' +
                     '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.25rem;font-weight:700;color:white;">' + (page.name || 'P')[0].toUpperCase() + '</div>' +
@@ -2203,7 +2203,7 @@
             apiRequest('/api/pages', {method: 'POST', body: JSON.stringify({name: name || 'My Page', username: username})})
             .then(function(data) {
                 if (data.success && data.page) {
-                    showToast('Page created!', 'noly.pro/@' + data.page.username, 'success');
+                    showToast('Page created!', 'go.noly.pro/@' + data.page.username, 'success');
                     closeAllModals();
                     document.getElementById('newPageName').value = '';
                     document.getElementById('newPageUsername').value = '';
