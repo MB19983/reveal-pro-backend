@@ -888,53 +888,71 @@
         
         // ==================== EVENTS ====================
         function setupEvents() {
-            // Login events - always exist
-            var loginBtn = document.getElementById('loginBtn');
-            var registerBtn = document.getElementById('registerBtn');
-            var resetBtn = document.getElementById('resetBtn');
-            var newPasswordBtn = document.getElementById('newPasswordBtn');
-            var switchLink = document.getElementById('switchLink');
-            var forgotPasswordLink = document.getElementById('forgotPasswordLink');
-            var backToLoginLink = document.getElementById('backToLoginLink');
-            
-            if (loginBtn) loginBtn.onclick = handleLogin;
-            if (registerBtn) registerBtn.onclick = handleRegister;
-            if (resetBtn) resetBtn.onclick = handleResetPassword;
-            if (newPasswordBtn) newPasswordBtn.onclick = handleNewPassword;
-            
-            if (switchLink) {
-                switchLink.onclick = function(e) {
-                    e.preventDefault();
-                    toggleAuthForms();
-                };
+            // Use event delegation for login screen - robust against DOM modifications
+            var loginScreen = document.getElementById('loginScreen');
+            if (loginScreen) {
+                loginScreen.addEventListener('click', function(e) {
+                    var target = e.target;
+                    var id = target.id;
+
+                    // Handle button clicks
+                    if (id === 'loginBtn' || target.closest('#loginBtn')) {
+                        e.preventDefault();
+                        handleLogin();
+                        return;
+                    }
+                    if (id === 'registerBtn' || target.closest('#registerBtn')) {
+                        e.preventDefault();
+                        handleRegister();
+                        return;
+                    }
+                    if (id === 'resetBtn' || target.closest('#resetBtn')) {
+                        e.preventDefault();
+                        handleResetPassword();
+                        return;
+                    }
+                    if (id === 'newPasswordBtn' || target.closest('#newPasswordBtn')) {
+                        e.preventDefault();
+                        handleNewPassword();
+                        return;
+                    }
+
+                    // Handle link clicks
+                    if (id === 'switchLink' || target.closest('#switchLink')) {
+                        e.preventDefault();
+                        toggleAuthForms();
+                        return;
+                    }
+                    if (id === 'forgotPasswordLink' || target.closest('#forgotPasswordLink')) {
+                        e.preventDefault();
+                        showResetForm();
+                        return;
+                    }
+                    if (id === 'backToLoginLink' || target.closest('#backToLoginLink')) {
+                        e.preventDefault();
+                        showLoginForm();
+                        return;
+                    }
+                });
+
+                // Keyboard events for Enter key
+                loginScreen.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        var id = e.target.id;
+                        if (id === 'loginEmail' || id === 'loginPassword') {
+                            handleLogin();
+                        } else if (id === 'registerName' || id === 'registerEmail' || id === 'registerPassword') {
+                            handleRegister();
+                        } else if (id === 'resetEmail') {
+                            handleResetPassword();
+                        } else if (id === 'newPassword' || id === 'confirmPassword') {
+                            handleNewPassword();
+                        }
+                    }
+                });
             }
-            
-            if (forgotPasswordLink) {
-                forgotPasswordLink.onclick = function(e) {
-                    e.preventDefault();
-                    showResetForm();
-                };
-            }
-            
-            if (backToLoginLink) {
-                backToLoginLink.onclick = function(e) {
-                    e.preventDefault();
-                    showLoginForm();
-                };
-            }
-            
-            // Keyboard events
-            var loginPassword = document.getElementById('loginPassword');
-            var registerPassword = document.getElementById('registerPassword');
-            var resetEmail = document.getElementById('resetEmail');
-            var confirmPassword = document.getElementById('confirmPassword');
-            
-            if (loginPassword) loginPassword.onkeypress = function(e) { if (e.key === 'Enter') handleLogin(); };
-            if (registerPassword) registerPassword.onkeypress = function(e) { if (e.key === 'Enter') handleRegister(); };
-            if (resetEmail) resetEmail.onkeypress = function(e) { if (e.key === 'Enter') handleResetPassword(); };
-            if (confirmPassword) confirmPassword.onkeypress = function(e) { if (e.key === 'Enter') handleNewPassword(); };
-            
-            // App events - may not exist on login screen
+
+            // App events with addEventListener for robustness
             var refreshBtn = document.getElementById('refreshBtn');
             var hamburgerBtn = document.getElementById('hamburgerBtn');
             var fabBtn = document.getElementById('fabBtn');
@@ -947,39 +965,39 @@
             var createQRBtn = document.getElementById('createQRBtn');
             var newQRUrl = document.getElementById('newQRUrl');
             var userCard = document.getElementById('userCard');
-            
-            if (refreshBtn) refreshBtn.onclick = loadAllData;
-            if (hamburgerBtn) hamburgerBtn.onclick = function() { document.getElementById('sidebar').classList.toggle('open'); };
-            if (fabBtn) fabBtn.onclick = function() { openModal('createModal'); };
-            if (modalOverlay) modalOverlay.onclick = closeAllModals;
-            
-            if (actionLink) actionLink.onclick = function() {
+
+            if (refreshBtn) refreshBtn.addEventListener('click', loadAllData);
+            if (hamburgerBtn) hamburgerBtn.addEventListener('click', function() { document.getElementById('sidebar').classList.toggle('open'); });
+            if (fabBtn) fabBtn.addEventListener('click', function() { openModal('createModal'); });
+            if (modalOverlay) modalOverlay.addEventListener('click', closeAllModals);
+
+            if (actionLink) actionLink.addEventListener('click', function() {
                 closeAllModals();
                 setTimeout(function() { openModal('linkModal'); }, 150);
-            };
-            if (actionPage) actionPage.onclick = function() {
+            });
+            if (actionPage) actionPage.addEventListener('click', function() {
                 if (userPlan === 'free') { switchView('pricing'); closeAllModals(); return; }
                 closeAllModals();
                 setTimeout(function() { openModal('pageModal'); }, 150);
-            };
-            if (actionQR) actionQR.onclick = function() {
+            });
+            if (actionQR) actionQR.addEventListener('click', function() {
                 if (userPlan === 'free') { switchView('pricing'); closeAllModals(); return; }
                 closeAllModals();
                 setTimeout(function() { openModal('qrModal'); }, 150);
-            };
-            
-            if (createLinkBtn) createLinkBtn.onclick = createLink;
-            if (createPageBtn) createPageBtn.onclick = createPage;
-            if (createQRBtn) createQRBtn.onclick = createQR;
-            if (newQRUrl) newQRUrl.oninput = updateQRPreview;
-            if (userCard) userCard.onclick = function() { switchView('settings'); };
+            });
+
+            if (createLinkBtn) createLinkBtn.addEventListener('click', createLink);
+            if (createPageBtn) createPageBtn.addEventListener('click', createPage);
+            if (createQRBtn) createQRBtn.addEventListener('click', createQR);
+            if (newQRUrl) newQRUrl.addEventListener('input', updateQRPreview);
+            if (userCard) userCard.addEventListener('click', function() { switchView('settings'); });
         }
-        
+
         function toggleAuthForms() {
             var loginForm = document.getElementById('loginForm');
             var registerForm = document.getElementById('registerForm');
             var switchText = document.getElementById('switchText');
-            
+
             if (loginForm.classList.contains('active')) {
                 loginForm.classList.remove('active');
                 registerForm.classList.add('active');
@@ -989,10 +1007,7 @@
                 loginForm.classList.add('active');
                 switchText.innerHTML = 'Don\'t have an account? <a href="#" id="switchLink">Sign up</a>';
             }
-            var newSwitchLink = document.getElementById('switchLink');
-            if (newSwitchLink) {
-                newSwitchLink.onclick = function(e) { e.preventDefault(); toggleAuthForms(); };
-            }
+            // No need to reattach - event delegation handles it
         }
         
         // ==================== AUTH ====================
