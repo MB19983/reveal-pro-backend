@@ -734,7 +734,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id, email_alerts')
       .eq('id', req.userId)
       .single();
     
@@ -766,22 +766,22 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
-    const { name, whatsapp, click_threshold } = req.body;
-    
+    const { name, whatsapp, click_threshold, email_alerts } = req.body;
+
     const { data: currentUser } = await supabase
       .from('users')
       .select('plan')
       .eq('id', req.userId)
       .single();
-    
+
     const updates = {};
     if (name !== undefined) updates.name = name.substring(0, 100); // Limit name length
-    
+
     // Only Pro users can save WhatsApp
     if (whatsapp !== undefined && currentUser?.plan === 'pro') {
       updates.whatsapp = whatsapp;
     }
-    
+
     // Allow custom click threshold (1-100)
     if (click_threshold !== undefined) {
       const threshold = parseInt(click_threshold);
@@ -789,18 +789,23 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
         updates.click_threshold = threshold;
       }
     }
-    
+
+    // Email alerts toggle
+    if (email_alerts !== undefined) {
+      updates.email_alerts = !!email_alerts;
+    }
+
     const { data: user, error } = await supabase
       .from('users')
       .update(updates)
       .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status')
+      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, email_alerts')
       .single();
-    
+
     if (error) throw error;
-    
+
     res.json({ success: true, user });
-    
+
   } catch (error) {
     res.status(500).json({ error: 'Erreur mise à jour' });
   }
@@ -1036,6 +1041,92 @@ app.get('/api/stripe/status', authMiddleware, async (req, res) => {
     
   } catch (error) {
     res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// ============ STATS ENDPOINT ============
+
+app.get('/api/stats', authMiddleware, async (req, res) => {
+  try {
+    // Get all links for this user
+    const { data: links, error: linksError } = await supabase
+      .from('links')
+      .select('id, click_threshold')
+      .eq('user_id', req.userId);
+
+    if (linksError) throw linksError;
+
+    const linkIds = (links || []).map(l => l.id);
+    const totalLinks = linkIds.length;
+
+    if (linkIds.length === 0) {
+      return res.json({
+        success: true,
+        total_links: 0,
+        total_clicks: 0,
+        hot_leads: 0,
+        total_scans: 0
+      });
+    }
+
+    // Get all clicks for user's links
+    const { data: clicks, error: clicksError } = await supabase
+      .from('clicks')
+      .select('link_id, is_bot')
+      .in('link_id', linkIds);
+
+    if (clicksError) throw clicksError;
+
+    // Calculate total human clicks
+    const humanClicks = (clicks || []).filter(c => !c.is_bot);
+    const totalClicks = humanClicks.length;
+
+    // Calculate hot leads (links that reached their click threshold)
+    const clicksByLink = {};
+    humanClicks.forEach(click => {
+      clicksByLink[click.link_id] = (clicksByLink[click.link_id] || 0) + 1;
+    });
+
+    let hotLeads = 0;
+    links.forEach(link => {
+      const linkClicks = clicksByLink[link.id] || 0;
+      const threshold = link.click_threshold || 5;
+      if (linkClicks >= threshold) {
+        hotLeads++;
+      }
+    });
+
+    // Get QR scans count (if QR codes table exists)
+    let totalScans = 0;
+    try {
+      const { data: qrCodes } = await supabase
+        .from('qr_codes')
+        .select('id')
+        .eq('user_id', req.userId);
+
+      if (qrCodes && qrCodes.length > 0) {
+        const qrIds = qrCodes.map(q => q.id);
+        const { count } = await supabase
+          .from('qr_scans')
+          .select('id', { count: 'exact' })
+          .in('qr_id', qrIds);
+        totalScans = count || 0;
+      }
+    } catch (e) {
+      // QR tables might not exist yet, ignore error
+    }
+
+    res.json({
+      success: true,
+      total_links: totalLinks,
+      total_clicks: totalClicks,
+      hot_leads: hotLeads,
+      total_scans: totalScans
+    });
+
+  } catch (error) {
+    console.error('Stats error:', error.message);
+    res.status(500).json({ error: 'Erreur statistiques' });
   }
 });
 
