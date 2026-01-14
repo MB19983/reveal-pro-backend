@@ -271,7 +271,9 @@
             transition: all 0.2s;
         }
         .icon-btn:hover { background: var(--bg-elevated); color: var(--text); }
-        .icon-btn svg { width: 20px; height: 20px; }
+        .icon-btn svg { width: 20px; height: 20px; transition: transform 0.3s; }
+        .icon-btn.spinning svg { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         
         .hamburger { display: none; }
         
@@ -568,6 +570,62 @@
             box-shadow: 0 8px 32px rgba(0,0,0,0.2);
         }
         .qr-preview-box canvas, .qr-preview-box img { width: 140px !important; height: 140px !important; }
+
+        /* Threshold selector */
+        .threshold-row { display: flex; gap: 8px; align-items: center; }
+        .threshold-input { width: 80px; text-align: center; }
+        .threshold-presets { display: flex; gap: 6px; flex: 1; }
+        .threshold-btn {
+            padding: 10px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+        }
+        .threshold-btn:hover, .threshold-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+        /* Link success view */
+        .link-success { text-align: center; }
+        .link-success-icon {
+            width: 64px;
+            height: 64px;
+            background: rgba(34,197,94,0.15);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            color: var(--success);
+        }
+        .link-success-icon svg { width: 32px; height: 32px; }
+        .link-success-title { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+        .link-success-url {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 0.95rem;
+            color: var(--accent);
+            word-break: break-all;
+        }
+        .link-success-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .link-success-actions .btn { flex: 1; }
+
+        /* Sidebar overlay */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 140;
+        }
+        .sidebar-overlay.active { display: block; }
         
         /* Toast */
         .toast {
@@ -877,6 +935,8 @@
     
     <!-- ==================== APP ==================== -->
     <div id="appContainer">
+        <!-- Sidebar Overlay (for mobile) -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
@@ -948,16 +1008,42 @@
     <div class="modal" id="linkModal">
         <button class="modal-close" onclick="closeAllModals()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         <div class="modal-header"><div class="modal-title">New Tracked Link</div></div>
-        <div class="modal-content">
-            <div class="form-group">
-                <label class="form-label">Destination URL</label>
-                <input type="url" class="form-input" id="newLinkUrl" placeholder="https://example.com/proposal.pdf">
+        <div class="modal-content" id="linkModalContent">
+            <div id="linkFormView">
+                <div class="form-group">
+                    <label class="form-label">Destination URL</label>
+                    <input type="url" class="form-input" id="newLinkUrl" placeholder="https://example.com/proposal.pdf">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Link Name</label>
+                    <input type="text" class="form-input" id="newLinkName" placeholder="Q1 Proposal - Client">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notification Threshold (alert every X clicks)</label>
+                    <div class="threshold-row">
+                        <input type="number" class="form-input threshold-input" id="newLinkThreshold" value="2" min="1" max="100">
+                        <div class="threshold-presets">
+                            <button type="button" class="threshold-btn active" data-value="2">2</button>
+                            <button type="button" class="threshold-btn" data-value="4">4</button>
+                            <button type="button" class="threshold-btn" data-value="6">6</button>
+                            <button type="button" class="threshold-btn" data-value="10">10</button>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary" id="createLinkBtn">Create Link</button>
             </div>
-            <div class="form-group">
-                <label class="form-label">Link Name</label>
-                <input type="text" class="form-input" id="newLinkName" placeholder="Q1 Proposal - Client">
+            <div id="linkSuccessView" style="display:none;">
+                <div class="link-success">
+                    <div class="link-success-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg></div>
+                    <div class="link-success-title">Link Created!</div>
+                    <p style="color:var(--text-secondary);margin-bottom:8px;" id="successLinkName"></p>
+                    <div class="link-success-url" id="successLinkUrl"></div>
+                    <div class="link-success-actions">
+                        <button class="btn btn-primary" id="copySuccessLinkBtn">Copy Link</button>
+                        <button class="btn btn-secondary" onclick="resetLinkModal()">Create Another</button>
+                    </div>
+                </div>
             </div>
-            <button type="button" class="btn btn-primary" id="createLinkBtn">Create Link</button>
         </div>
     </div>
     
@@ -1057,8 +1143,10 @@
             // Check for payment status
             var paymentStatus = urlParams.get('payment');
             if (paymentStatus === 'success') {
-                showToast('Success', 'Payment successful! Welcome to Pro.', 'success');
+                showToast('Success', 'Payment successful! Refreshing your plan...', 'success');
                 window.history.replaceState({}, '', window.location.pathname);
+                // Refresh user data to get updated plan
+                refreshUserData();
             } else if (paymentStatus === 'cancelled') {
                 showToast('Info', 'Payment cancelled', 'error');
                 window.history.replaceState({}, '', window.location.pathname);
@@ -1147,8 +1235,35 @@
             var newQRUrl = document.getElementById('newQRUrl');
             var userCard = document.getElementById('userCard');
 
-            if (refreshBtn) refreshBtn.addEventListener('click', loadAllData);
-            if (hamburgerBtn) hamburgerBtn.addEventListener('click', function() { document.getElementById('sidebar').classList.toggle('open'); });
+            if (refreshBtn) refreshBtn.addEventListener('click', function() {
+                refreshBtn.classList.add('spinning');
+                loadAllData();
+                setTimeout(function() { refreshBtn.classList.remove('spinning'); }, 1000);
+            });
+            if (hamburgerBtn) hamburgerBtn.addEventListener('click', function() {
+                document.getElementById('sidebar').classList.toggle('open');
+                document.getElementById('sidebarOverlay').classList.toggle('active');
+            });
+
+            // Close sidebar when clicking overlay
+            var sidebarOverlay = document.getElementById('sidebarOverlay');
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', function() {
+                document.getElementById('sidebar').classList.remove('open');
+                document.getElementById('sidebarOverlay').classList.remove('active');
+            });
+
+            // Threshold preset buttons
+            var thresholdBtns = document.querySelectorAll('.threshold-btn');
+            for (var i = 0; i < thresholdBtns.length; i++) {
+                thresholdBtns[i].addEventListener('click', function() {
+                    var value = this.getAttribute('data-value');
+                    document.getElementById('newLinkThreshold').value = value;
+                    // Update active state
+                    var allBtns = document.querySelectorAll('.threshold-btn');
+                    for (var j = 0; j < allBtns.length; j++) allBtns[j].classList.remove('active');
+                    this.classList.add('active');
+                });
+            }
             if (fabBtn) fabBtn.addEventListener('click', function() { openModal('createModal'); });
             if (modalOverlay) modalOverlay.addEventListener('click', closeAllModals);
 
@@ -1412,6 +1527,7 @@
                     var view = this.getAttribute('data-view');
                     switchView(view);
                     document.getElementById('sidebar').classList.remove('open');
+                    document.getElementById('sidebarOverlay').classList.remove('active');
                 });
             }
         }
@@ -1438,6 +1554,26 @@
             });
         }
         
+        function refreshUserData() {
+            if (!token) return;
+            apiRequest('/api/auth/me')
+                .then(function(data) {
+                    if (data && data.user) {
+                        user = data.user;
+                        userPlan = user.plan || 'free';
+                        localStorage.setItem('noly_user', JSON.stringify(user));
+                        // Update UI
+                        document.getElementById('userName').textContent = user.name || 'User';
+                        document.getElementById('userEmail').textContent = user.email || '';
+                        renderSidebar();
+                        if (currentView === 'pricing') renderPricing();
+                        if (currentView === 'settings') renderSettings();
+                        showToast('Plan Updated', 'You are now on ' + userPlan.charAt(0).toUpperCase() + userPlan.slice(1) + ' plan!', 'success');
+                    }
+                })
+                .catch(function() {});
+        }
+
         function loadAllData() {
             apiRequest('/api/stats').then(function(data) {
                 window.statsData = data || {};
@@ -1728,30 +1864,45 @@
         }
         
         // ==================== CREATE ====================
+        var lastCreatedLink = null;
+
         function createLink() {
             var url = document.getElementById('newLinkUrl').value;
             var name = document.getElementById('newLinkName').value;
-            
+            var threshold = parseInt(document.getElementById('newLinkThreshold').value) || 2;
+
             if (!url) { showToast('Error', 'URL is required', 'error'); return; }
             if (!url.startsWith('http')) { showToast('Error', 'URL must start with http:// or https://', 'error'); return; }
-            
+
             var btn = document.getElementById('createLinkBtn');
             btn.disabled = true;
             btn.textContent = 'Creating...';
-            
+
             apiRequest('/api/links', {
                 method: 'POST',
-                body: JSON.stringify({original_url: url, name: name || 'Untitled Link'})
+                body: JSON.stringify({
+                    original_url: url,
+                    name: name || 'Untitled Link',
+                    click_threshold: threshold
+                })
             })
             .then(function(data) {
                 btn.disabled = false;
                 btn.textContent = 'Create Link';
-                
+
                 if (data.short_code) {
-                    showToast('Link created!', API_BASE + '/' + data.short_code, 'success');
-                    closeAllModals();
-                    document.getElementById('newLinkUrl').value = '';
-                    document.getElementById('newLinkName').value = '';
+                    lastCreatedLink = API_BASE + '/' + data.short_code;
+                    // Show success view instead of closing modal
+                    document.getElementById('linkFormView').style.display = 'none';
+                    document.getElementById('linkSuccessView').style.display = 'block';
+                    document.getElementById('successLinkName').textContent = name || 'Untitled Link';
+                    document.getElementById('successLinkUrl').textContent = lastCreatedLink;
+
+                    // Setup copy button
+                    document.getElementById('copySuccessLinkBtn').onclick = function() {
+                        copyUrl(lastCreatedLink);
+                    };
+
                     loadAllData();
                 } else {
                     showToast('Error', data.error || data.message || 'Failed to create link', 'error');
@@ -1762,6 +1913,20 @@
                 btn.textContent = 'Create Link';
                 showToast('Error', 'Failed to create link', 'error');
             });
+        }
+
+        function resetLinkModal() {
+            document.getElementById('linkFormView').style.display = 'block';
+            document.getElementById('linkSuccessView').style.display = 'none';
+            document.getElementById('newLinkUrl').value = '';
+            document.getElementById('newLinkName').value = '';
+            document.getElementById('newLinkThreshold').value = '2';
+            // Reset active threshold button
+            var allBtns = document.querySelectorAll('.threshold-btn');
+            for (var i = 0; i < allBtns.length; i++) {
+                allBtns[i].classList.remove('active');
+                if (allBtns[i].getAttribute('data-value') === '2') allBtns[i].classList.add('active');
+            }
         }
         
         function createPage() {
@@ -2010,6 +2175,8 @@
             document.getElementById('modalOverlay').classList.remove('active');
             var modals = document.querySelectorAll('.modal');
             for (var i = 0; i < modals.length; i++) modals[i].classList.remove('active');
+            // Reset link modal to form view
+            resetLinkModal();
         }
         
         function updateQRPreview() {
