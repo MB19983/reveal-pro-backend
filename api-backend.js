@@ -1718,39 +1718,48 @@ app.get('/api/pages/view/:username', async (req, res) => {
 app.get('/@:username', async (req, res) => {
   try {
     const { username } = req.params;
+    console.log('Loading Smart Page for:', username);
 
     const { data: page, error } = await supabase
       .from('pages')
-      .select('id, username, name, bio, avatar_url, links, theme')
+      .select('*')
       .eq('username', username.toLowerCase())
       .single();
 
-    if (error || !page) {
+    if (error) {
+      console.log('Page query error:', error.message);
+    }
+
+    if (!page) {
       return res.status(404).send(`
         <!DOCTYPE html>
         <html><head><title>Page Not Found - Noly</title>
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <style>body{font-family:system-ui;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
         .box{text-align:center;padding:40px;}.title{font-size:2rem;margin-bottom:8px;}.text{color:#888;}</style>
-        </head><body><div class="box"><div class="title">Page not found</div><div class="text">This page doesn't exist.</div></div></body></html>
+        </head><body><div class="box"><div class="title">Page not found</div><div class="text">@${escapeHtml(username)} doesn't exist.</div></div></body></html>
       `);
     }
 
-    // Increment view count
-    await supabase.from('pages').update({ total_views: (page.total_views || 0) + 1 }).eq('id', page.id);
+    // Increment view count (non-blocking)
+    supabase.from('pages')
+      .update({ total_views: (page.total_views || 0) + 1 })
+      .eq('id', page.id)
+      .then(() => {})
+      .catch(e => console.log('View count update error:', e.message));
 
-    // Track page view
-    await supabase.from('page_views').insert({
+    // Track page view (non-blocking, table might not exist)
+    supabase.from('page_views').insert({
       page_id: page.id,
-      ip_address: req.ip,
-      user_agent: req.get('User-Agent'),
-      referrer: req.get('Referer')
-    }).catch(() => {});
+      ip_address: req.ip || 'unknown',
+      user_agent: req.get('User-Agent') || 'unknown',
+      referrer: req.get('Referer') || ''
+    }).then(() => {}).catch(() => {});
 
-    const links = page.links || [];
+    const links = Array.isArray(page.links) ? page.links : [];
     const linksHtml = links.map(link => `
-      <a href="${link.url}" target="_blank" rel="noopener" class="link-btn">
-        ${escapeHtml(link.title || link.url)}
+      <a href="${escapeHtml(link.url || '#')}" target="_blank" rel="noopener" class="link-btn">
+        ${escapeHtml(link.title || link.url || 'Link')}
       </a>
     `).join('');
 
@@ -1802,8 +1811,15 @@ app.get('/@:username', async (req, res) => {
     res.send(html);
 
   } catch (error) {
-    console.error('Smart page error:', error);
-    res.status(500).send('Error loading page');
+    console.error('Smart page error:', error.message, error.stack);
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html><head><title>Error - Noly</title>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>body{font-family:system-ui;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+      .box{text-align:center;padding:40px;}.title{font-size:2rem;margin-bottom:8px;color:#f00;}.text{color:#888;}</style>
+      </head><body><div class="box"><div class="title">Error</div><div class="text">Something went wrong. Please try again later.</div></div></body></html>
+    `);
   }
 });
 
