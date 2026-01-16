@@ -734,7 +734,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, stripe_customer_id, notify_email')
+      .select('id, email, name, plan, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, subscription_status, stripe_customer_id, notify_email')
       .eq('id', req.userId)
       .single();
     
@@ -766,7 +766,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
-    const { name, whatsapp, click_threshold, notify_email } = req.body;
+    const { name, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, notify_email } = req.body;
 
     const { data: currentUser } = await supabase
       .from('users')
@@ -777,9 +777,20 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
     const updates = {};
     if (name !== undefined) updates.name = name.substring(0, 100); // Limit name length
 
-    // Only Pro users can save WhatsApp
-    if (whatsapp !== undefined && currentUser?.plan === 'pro') {
-      updates.whatsapp = whatsapp;
+    // Only Pro users can save WhatsApp settings
+    if (currentUser?.plan === 'pro') {
+      // Legacy whatsapp field
+      if (whatsapp !== undefined) {
+        updates.whatsapp = whatsapp;
+      }
+      // New whatsapp_number field
+      if (whatsapp_number !== undefined) {
+        updates.whatsapp_number = whatsapp_number.substring(0, 20);
+      }
+      // WhatsApp alerts toggle
+      if (notify_whatsapp !== undefined) {
+        updates.notify_whatsapp = !!notify_whatsapp;
+      }
     }
 
     // Allow custom click threshold (1-100)
@@ -799,7 +810,7 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
       .from('users')
       .update(updates)
       .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, click_threshold, subscription_status, notify_email')
+      .select('id, email, name, plan, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, subscription_status, notify_email')
       .single();
 
     if (error) throw error;
