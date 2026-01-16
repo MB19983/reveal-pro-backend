@@ -1827,6 +1827,7 @@
         }
 
         var currentEditPage = null;
+        var LINK_ICONS = ['🔗', '🌐', '📧', '📱', '💼', '🎨', '📸', '🎵', '🎬', '📝', '🛒', '💰', '🎯', '🚀', '⭐', '❤️', '📍', '🔔', '💬', '👤'];
 
         function openPageEditor(pageId) {
             var page = pagesData.find(function(p) { return p.id === pageId; });
@@ -1836,62 +1837,162 @@
 
             var pageLinks = currentEditPage.links;
             var linksHtml = '';
+
             for (var i = 0; i < pageLinks.length; i++) {
                 var link = pageLinks[i];
-                linksHtml += '<div class="page-link-item" style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;">' +
-                    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">' +
-                        '<div class="drag-handle" style="color:var(--text-muted);cursor:grab;width:20px;height:20px;">' + ICONS.drag + '</div>' +
-                        '<div style="flex:1;font-weight:500;">' + (link.title || 'New Link') + '</div>' +
-                        '<button class="btn" style="padding:6px 10px;background:var(--danger);color:white;border-radius:8px;" onclick="removePageLink(' + i + ')">' + ICONS.trash + '</button>' +
+                var isWhatsApp = link.type === 'whatsapp';
+                var isPriority = link.priority === true;
+
+                linksHtml += '<div class="page-link-item" data-index="' + i + '" style="background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;' + (isPriority ? 'border-color:var(--purple);box-shadow:0 0 20px rgba(168,85,247,0.1);' : '') + '">' +
+
+                    // Header with drag, title preview, and delete
+                    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">' +
+                        '<div class="drag-handle" style="color:var(--text-muted);cursor:grab;">' + ICONS.drag + '</div>' +
+                        '<span style="font-size:1.2rem;">' + (link.icon || '🔗') + '</span>' +
+                        '<div style="flex:1;font-weight:600;color:var(--text);">' + escapeHTML(link.title || 'New Link') + '</div>' +
+                        (isPriority ? '<span style="background:var(--purple);color:white;padding:4px 8px;border-radius:6px;font-size:0.7rem;font-weight:600;">⭐ PRIORITY</span>' : '') +
+                        '<button class="btn" style="padding:8px 12px;background:var(--danger);color:white;border-radius:8px;" onclick="removePageLink(' + i + ')">' + ICONS.trash + '</button>' +
                     '</div>' +
-                    '<div style="margin-bottom:10px;">' +
-                        '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:8px;" placeholder="Link Title (e.g. My Website)" value="' + escapeHTML(link.title || '') + '" data-link-index="' + i + '" data-field="title" oninput="updateLinkPreview(this)">' +
+
+                    // Link Type Selector
+                    '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
+                        '<button class="btn ' + (!isWhatsApp ? 'btn-primary' : 'btn-secondary') + '" style="flex:1;padding:10px;font-size:0.85rem;border-radius:10px;" onclick="setLinkType(' + i + ', \'link\')">' +
+                            '🔗 Normal Link' +
+                        '</button>' +
+                        '<button class="btn ' + (isWhatsApp ? 'btn-primary' : 'btn-secondary') + '" style="flex:1;padding:10px;font-size:0.85rem;border-radius:10px;" onclick="setLinkType(' + i + ', \'whatsapp\')">' +
+                            '💬 WhatsApp' +
+                        '</button>' +
                     '</div>' +
-                    '<div>' +
-                        '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:8px;" placeholder="URL (e.g. https://example.com)" value="' + escapeHTML(link.url || '') + '" data-link-index="' + i + '" data-field="url">' +
+
+                    // Normal Link Fields
+                    (!isWhatsApp ? (
+                        '<div class="link-fields-normal">' +
+                            '<div style="margin-bottom:12px;">' +
+                                '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Link Title</label>' +
+                                '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:10px;" placeholder="My awesome link" value="' + escapeHTML(link.title || '') + '" data-link-index="' + i + '" data-field="title" oninput="updateLinkPreview(this)">' +
+                            '</div>' +
+                            '<div style="margin-bottom:12px;">' +
+                                '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">URL</label>' +
+                                '<input type="url" class="form-input" style="width:100%;padding:12px;border-radius:10px;" placeholder="https://example.com" value="' + escapeHTML(link.url || '') + '" data-link-index="' + i + '" data-field="url">' +
+                            '</div>' +
+                        '</div>'
+                    ) : (
+                        // WhatsApp Fields
+                        '<div class="link-fields-whatsapp">' +
+                            '<div style="margin-bottom:12px;">' +
+                                '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Button Text</label>' +
+                                '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:10px;" placeholder="Contact me on WhatsApp" value="' + escapeHTML(link.title || '') + '" data-link-index="' + i + '" data-field="title" oninput="updateLinkPreview(this)">' +
+                            '</div>' +
+                            '<div style="margin-bottom:12px;">' +
+                                '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Phone Number (with country code)</label>' +
+                                '<input type="tel" class="form-input" style="width:100%;padding:12px;border-radius:10px;" placeholder="33612345678" value="' + escapeHTML(link.phone || '') + '" data-link-index="' + i + '" data-field="phone">' +
+                            '</div>' +
+                            '<div style="margin-bottom:12px;">' +
+                                '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Pre-filled Message</label>' +
+                                '<input type="text" class="form-input" style="width:100%;padding:12px;border-radius:10px;" placeholder="Hi! I found you on Noly..." value="' + escapeHTML(link.message || '') + '" data-link-index="' + i + '" data-field="message">' +
+                            '</div>' +
+                        '</div>'
+                    )) +
+
+                    // Icon Picker
+                    '<div style="margin-bottom:12px;">' +
+                        '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Icon</label>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+                            LINK_ICONS.map(function(icon) {
+                                return '<button type="button" class="btn" style="padding:8px 10px;font-size:1.1rem;border-radius:8px;' + (link.icon === icon ? 'background:var(--purple);' : 'background:var(--bg-card);') + '" onclick="setLinkIcon(' + i + ', \'' + icon + '\')">' + icon + '</button>';
+                            }).join('') +
+                        '</div>' +
                     '</div>' +
+
+                    // Advanced Options Toggle
+                    '<details style="margin-top:12px;">' +
+                        '<summary style="cursor:pointer;color:var(--purple);font-weight:500;font-size:0.9rem;padding:8px 0;">⚙️ Advanced Options</summary>' +
+                        '<div style="padding-top:12px;">' +
+
+                            // Priority Toggle
+                            '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--bg-card);border-radius:10px;margin-bottom:12px;">' +
+                                '<div>' +
+                                    '<div style="font-weight:500;">⭐ Priority Link</div>' +
+                                    '<div style="font-size:0.8rem;color:var(--text-muted);">Highlight with animation</div>' +
+                                '</div>' +
+                                '<label style="position:relative;width:50px;height:28px;">' +
+                                    '<input type="checkbox" ' + (isPriority ? 'checked' : '') + ' onchange="toggleLinkPriority(' + i + ', this.checked)" style="opacity:0;width:0;height:0;">' +
+                                    '<span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:' + (isPriority ? 'var(--purple)' : 'var(--border)') + ';border-radius:28px;transition:0.3s;"></span>' +
+                                    '<span style="position:absolute;height:22px;width:22px;left:' + (isPriority ? '25px' : '3px') + ';bottom:3px;background:white;border-radius:50%;transition:0.3s;"></span>' +
+                                '</label>' +
+                            '</div>' +
+
+                            // Scheduling
+                            '<div style="padding:12px;background:var(--bg-card);border-radius:10px;">' +
+                                '<div style="font-weight:500;margin-bottom:8px;">📅 Schedule Link</div>' +
+                                '<div style="display:flex;gap:8px;">' +
+                                    '<div style="flex:1;">' +
+                                        '<label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Start Date</label>' +
+                                        '<input type="date" class="form-input" style="width:100%;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + (link.startDate || '') + '" data-link-index="' + i + '" data-field="startDate">' +
+                                    '</div>' +
+                                    '<div style="flex:1;">' +
+                                        '<label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">End Date</label>' +
+                                        '<input type="date" class="form-input" style="width:100%;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + (link.endDate || '') + '" data-link-index="' + i + '" data-field="endDate">' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+
+                        '</div>' +
+                    '</details>' +
                 '</div>';
             }
 
             if (pageLinks.length === 0) {
-                linksHtml = '<div style="text-align:center;padding:30px;color:var(--text-muted);background:var(--bg);border-radius:12px;border:2px dashed var(--border);">' +
-                    '<div style="font-size:2rem;margin-bottom:8px;">🔗</div>' +
-                    '<div>No links yet. Add your first link!</div>' +
+                linksHtml = '<div style="text-align:center;padding:40px;color:var(--text-muted);background:var(--bg);border-radius:16px;border:2px dashed var(--border);">' +
+                    '<div style="font-size:3rem;margin-bottom:12px;">🔗</div>' +
+                    '<div style="font-weight:500;">No links yet</div>' +
+                    '<div style="font-size:0.9rem;margin-top:4px;">Add your first link below!</div>' +
                 '</div>';
             }
 
             var pageUrl = API_BASE + '/@' + page.username;
-            var html = '<div style="padding:20px;max-height:80vh;overflow-y:auto;">' +
-                '<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">' +
-                    '<div style="width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.25rem;font-weight:700;color:white;">' + (page.name || 'P')[0].toUpperCase() + '</div>' +
+            var html = '<div style="padding:20px;max-height:85vh;overflow-y:auto;">' +
+
+                // Header
+                '<div style="display:flex;align-items:center;gap:16px;margin-bottom:28px;">' +
+                    '<div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;color:white;">' + (page.name || 'P')[0].toUpperCase() + '</div>' +
                     '<div style="flex:1;">' +
-                        '<h3 style="margin:0;">Edit Page</h3>' +
-                        '<a href="' + pageUrl + '" target="_blank" style="color:var(--purple);font-size:0.9rem;">@' + escapeHTML(page.username) + ' ↗</a>' +
+                        '<h3 style="margin:0;font-size:1.25rem;">Edit Page</h3>' +
+                        '<a href="' + pageUrl + '" target="_blank" style="color:var(--purple);font-size:0.9rem;text-decoration:none;">@' + escapeHTML(page.username) + ' ↗</a>' +
                     '</div>' +
                 '</div>' +
 
+                // Display Name
                 '<div class="form-group" style="margin-bottom:20px;">' +
                     '<label style="display:block;margin-bottom:8px;font-weight:600;">Display Name</label>' +
-                    '<input type="text" class="form-input" id="editPageName" style="padding:14px;border-radius:10px;" value="' + escapeHTML(page.name || '') + '" placeholder="Your name or brand">' +
+                    '<input type="text" class="form-input" id="editPageName" style="padding:14px;border-radius:12px;" value="' + escapeHTML(page.name || '') + '" placeholder="Your name or brand">' +
                 '</div>' +
 
-                '<div class="form-group" style="margin-bottom:20px;">' +
+                // Bio
+                '<div class="form-group" style="margin-bottom:24px;">' +
                     '<label style="display:block;margin-bottom:8px;font-weight:600;">Bio</label>' +
-                    '<textarea class="form-input" id="editPageBio" rows="3" style="padding:14px;border-radius:10px;resize:none;" placeholder="Tell visitors about yourself...">' + escapeHTML(page.bio || '') + '</textarea>' +
+                    '<textarea class="form-input" id="editPageBio" rows="3" style="padding:14px;border-radius:12px;resize:none;" placeholder="Tell visitors about yourself...">' + escapeHTML(page.bio || '') + '</textarea>' +
                 '</div>' +
 
+                // Links Section
                 '<div class="form-group" style="margin-bottom:20px;">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-                        '<label style="font-weight:600;">Links</label>' +
-                        '<span style="font-size:0.85rem;color:var(--text-muted);">' + pageLinks.length + ' link' + (pageLinks.length !== 1 ? 's' : '') + '</span>' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+                        '<label style="font-weight:600;font-size:1.1rem;">🔗 Links</label>' +
+                        '<span style="font-size:0.85rem;color:var(--text-muted);background:var(--bg-card);padding:4px 12px;border-radius:20px;">' + pageLinks.length + ' link' + (pageLinks.length !== 1 ? 's' : '') + '</span>' +
                     '</div>' +
                     '<div id="pageLinksContainer">' + linksHtml + '</div>' +
-                    '<button class="btn" style="width:100%;margin-top:12px;padding:14px;background:transparent;border:2px dashed var(--purple);color:var(--purple);border-radius:12px;font-weight:600;" onclick="addPageLink()">+ Add New Link</button>' +
+
+                    // Add Link Buttons
+                    '<div style="display:flex;gap:10px;margin-top:16px;">' +
+                        '<button class="btn" style="flex:1;padding:14px;background:transparent;border:2px dashed var(--purple);color:var(--purple);border-radius:12px;font-weight:600;" onclick="addPageLink(\'link\')">+ Add Link</button>' +
+                        '<button class="btn" style="flex:1;padding:14px;background:transparent;border:2px dashed #25D366;color:#25D366;border-radius:12px;font-weight:600;" onclick="addPageLink(\'whatsapp\')">+ WhatsApp</button>' +
+                    '</div>' +
                 '</div>' +
 
-                '<div style="display:flex;gap:12px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">' +
-                    '<button class="btn btn-secondary" style="flex:1;padding:14px;border-radius:10px;" onclick="closeAllModals()">Cancel</button>' +
-                    '<button class="btn btn-primary" style="flex:1;padding:14px;border-radius:10px;" onclick="savePageChanges()">Save Changes</button>' +
+                // Action Buttons
+                '<div style="display:flex;gap:12px;margin-top:28px;padding-top:20px;border-top:1px solid var(--border);">' +
+                    '<button class="btn btn-secondary" style="flex:1;padding:14px;border-radius:12px;font-weight:600;" onclick="closeAllModals()">Cancel</button>' +
+                    '<button class="btn btn-primary" style="flex:1;padding:14px;border-radius:12px;font-weight:600;" onclick="savePageChanges()">💾 Save Changes</button>' +
                 '</div>' +
             '</div>';
 
@@ -1899,19 +2000,48 @@
             openModal('linkDetailModal');
         }
 
+        function setLinkType(index, type) {
+            if (!currentEditPage || !currentEditPage.links) return;
+            if (type === 'whatsapp') {
+                currentEditPage.links[index].type = 'whatsapp';
+                currentEditPage.links[index].url = '';
+            } else {
+                currentEditPage.links[index].type = 'link';
+                currentEditPage.links[index].phone = '';
+                currentEditPage.links[index].message = '';
+            }
+            openPageEditor(currentEditPage.id);
+        }
+
+        function setLinkIcon(index, icon) {
+            if (!currentEditPage || !currentEditPage.links) return;
+            currentEditPage.links[index].icon = icon;
+            openPageEditor(currentEditPage.id);
+        }
+
+        function toggleLinkPriority(index, isPriority) {
+            if (!currentEditPage || !currentEditPage.links) return;
+            currentEditPage.links[index].priority = isPriority;
+            openPageEditor(currentEditPage.id);
+        }
+
         function updateLinkPreview(input) {
             var item = input.closest('.page-link-item');
             if (!item) return;
-            var titleDiv = item.querySelector('div > div:nth-child(2)');
+            var titleDiv = item.querySelector('div > div:nth-child(4)');
             if (titleDiv) {
                 titleDiv.textContent = input.value || 'New Link';
             }
         }
 
-        function addPageLink() {
+        function addPageLink(type) {
             if (!currentEditPage) return;
             currentEditPage.links = currentEditPage.links || [];
-            currentEditPage.links.push({title: '', url: ''});
+            if (type === 'whatsapp') {
+                currentEditPage.links.push({type: 'whatsapp', title: 'Contact me', phone: '', message: '', icon: '💬'});
+            } else {
+                currentEditPage.links.push({title: '', url: '', icon: '🔗'});
+            }
             openPageEditor(currentEditPage.id);
         }
 
@@ -1931,11 +2061,43 @@
             var links = [];
             var container = document.getElementById('pageLinksContainer');
             var items = container.querySelectorAll('.page-link-item');
-            items.forEach(function(item) {
+
+            items.forEach(function(item, idx) {
+                var linkData = currentEditPage.links[idx] || {};
+                var isWhatsApp = linkData.type === 'whatsapp';
+
+                // Get values from inputs
                 var titleInput = item.querySelector('[data-field="title"]');
                 var urlInput = item.querySelector('[data-field="url"]');
-                if (titleInput && urlInput && (titleInput.value || urlInput.value)) {
-                    links.push({title: titleInput.value, url: urlInput.value});
+                var phoneInput = item.querySelector('[data-field="phone"]');
+                var messageInput = item.querySelector('[data-field="message"]');
+                var startDateInput = item.querySelector('[data-field="startDate"]');
+                var endDateInput = item.querySelector('[data-field="endDate"]');
+
+                var link = {
+                    title: titleInput ? titleInput.value : '',
+                    icon: linkData.icon || '🔗',
+                    priority: linkData.priority || false
+                };
+
+                if (isWhatsApp) {
+                    link.type = 'whatsapp';
+                    link.phone = phoneInput ? phoneInput.value : '';
+                    link.message = messageInput ? messageInput.value : '';
+                } else {
+                    link.url = urlInput ? urlInput.value : '';
+                }
+
+                if (startDateInput && startDateInput.value) {
+                    link.startDate = startDateInput.value;
+                }
+                if (endDateInput && endDateInput.value) {
+                    link.endDate = endDateInput.value;
+                }
+
+                // Only add if has title or url/phone
+                if (link.title || link.url || link.phone) {
+                    links.push(link);
                 }
             });
 
@@ -1948,11 +2110,13 @@
                     closeAllModals();
                     loadAllData();
                 } else {
-                    showToast('Error', data.error || 'Failed', 'error');
+                    showToast('Error', data.error || 'Failed to save', 'error');
                 }
+            }).catch(function(err) {
+                showToast('Error', 'Network error', 'error');
             });
         }
-        
+
         function renderQR() {
             var content = document.getElementById('appContent');
             var isPro = userPlan !== 'free';
