@@ -1141,6 +1141,7 @@
     <script>
         // ==================== CONFIG ====================
         var API_BASE = 'https://go.noly.pro';
+        var PAGES_BASE = 'https://noly.space';
         var token = null;
         var user = null;
         var userPlan = 'free';
@@ -1765,7 +1766,7 @@
             var html = '<div class="pages-grid">';
             for (var i = 0; i < pagesData.length; i++) {
                 var page = pagesData[i];
-                var pageUrl = API_BASE + '/@' + page.username;
+                var pageUrl = PAGES_BASE + '/@' + page.username;
                 var linksCount = Array.isArray(page.links) ? page.links.length : 0;
                 var viewsCount = page.total_views || 0;
 
@@ -1951,7 +1952,7 @@
                 '</div>';
             }
 
-            var pageUrl = API_BASE + '/@' + page.username;
+            var pageUrl = PAGES_BASE + '/@' + page.username;
             var html = '<div style="padding:20px;">' +
 
                 // Header
