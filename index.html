@@ -1438,7 +1438,29 @@
                 location.reload();
             }
         }
-        
+
+        function openStripePortal() {
+            showToast('Loading...', 'Opening subscription portal', 'success');
+            fetch(API_BASE + '/api/stripe/portal', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.url) {
+                    window.location.href = data.url;
+                } else {
+                    showToast('Error', data.error || 'Unable to open portal', 'error');
+                }
+            })
+            .catch(function(err) {
+                showToast('Error', 'Connection error', 'error');
+            });
+        }
+
         function showResetForm() {
             document.getElementById('loginForm').classList.remove('active');
             document.getElementById('registerForm').classList.remove('active');
@@ -1620,6 +1642,18 @@
         }
 
         function loadAllData() {
+            // Refresh user data to sync plan from database
+            apiRequest('/api/auth/me').then(function(data) {
+                if (data.success && data.user) {
+                    user = data.user;
+                    userPlan = user.plan || 'free';
+                    localStorage.setItem('noly_user', JSON.stringify(user));
+                    // Re-render current view if it depends on plan
+                    if (currentView === 'settings') renderSettings();
+                    if (currentView === 'pricing') renderPricing();
+                }
+            }).catch(function() {});
+
             apiRequest('/api/stats').then(function(data) {
                 window.statsData = data || {};
                 if (currentView === 'dashboard') renderDashboard();
@@ -2542,6 +2576,13 @@
                     '</div>' +
                     (isPaid ? '' : '<span class="pro-badge">Upgrade</span>') +
                 '</div>' +
+                (isPaid ? '<div class="settings-item" onclick="openStripePortal()">' +
+                    '<div class="settings-item-left">' +
+                        '<div class="settings-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>' +
+                        '<div class="settings-item-info"><div class="settings-item-title">Manage Subscription</div><div class="settings-item-desc">Change plan, update payment, or cancel</div></div>' +
+                    '</div>' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>' +
+                '</div>' : '') +
             '</div>' +
             '<div class="settings-section">' +
                 '<div class="settings-title">Notifications</div>' +
