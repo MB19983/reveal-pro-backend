@@ -1757,17 +1757,41 @@ app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req
     // Upload to imgbb (free image hosting)
     const imgbbApiKey = process.env.IMGBB_API_KEY || 'c4af8ef78906808aa07e57698fa28d09';
 
-    const formData = new URLSearchParams();
-    formData.append('key', imgbbApiKey);
-    formData.append('image', base64Image);
-    formData.append('name', `avatar_${req.userId}_${Date.now()}`);
+    const postData = `key=${imgbbApiKey}&image=${encodeURIComponent(base64Image)}&name=avatar_${req.userId}_${Date.now()}`;
 
-    const response = await fetch('https://api.imgbb.com/1/upload', {
-      method: 'POST',
-      body: formData
+    // Use native https module for compatibility
+    const https = require('https');
+
+    const uploadPromise = new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.imgbb.com',
+        port: 443,
+        path: '/1/upload',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const request = https.request(options, (response) => {
+        let data = '';
+        response.on('data', chunk => data += chunk);
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error('Invalid response from imgbb'));
+          }
+        });
+      });
+
+      request.on('error', reject);
+      request.write(postData);
+      request.end();
     });
 
-    const result = await response.json();
+    const result = await uploadPromise;
 
     if (!result.success) {
       console.error('imgbb upload error:', result);
