@@ -1966,13 +1966,18 @@
                 // Profile Photo
                 '<div class="form-group" style="margin-bottom:20px;">' +
                     '<label style="display:block;margin-bottom:8px;font-weight:600;">Profile Photo</label>' +
-                    '<div style="display:flex;gap:12px;align-items:center;">' +
-                        '<div id="avatarPreview" style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;color:white;overflow:hidden;flex-shrink:0;">' +
+                    '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
+                        '<div id="avatarPreview" style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--purple-dark));display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:700;color:white;overflow:hidden;flex-shrink:0;">' +
                             (page.avatar_url ? '<img src="' + escapeHTML(page.avatar_url) + '" style="width:100%;height:100%;object-fit:cover;">' : (page.name || 'P')[0].toUpperCase()) +
                         '</div>' +
-                        '<input type="url" class="form-input" id="editPageAvatar" style="flex:1;padding:14px;border-radius:12px;" value="' + escapeHTML(page.avatar_url || '') + '" placeholder="https://example.com/photo.jpg" oninput="previewAvatar(this.value)">' +
+                        '<div style="flex:1;min-width:200px;">' +
+                            '<input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="uploadAvatar(this)">' +
+                            '<button type="button" class="btn btn-secondary" style="width:100%;padding:12px;border-radius:10px;margin-bottom:8px;" onclick="document.getElementById(\'avatarFileInput\').click()">' +
+                                '📷 Upload from device' +
+                            '</button>' +
+                            '<input type="url" class="form-input" id="editPageAvatar" style="width:100%;padding:10px;border-radius:10px;font-size:0.85rem;" value="' + escapeHTML(page.avatar_url || '') + '" placeholder="Or paste URL..." oninput="previewAvatar(this.value)">' +
+                        '</div>' +
                     '</div>' +
-                    '<p style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;">Paste an image URL (supports jpg, png, gif)</p>' +
                 '</div>' +
 
                 // Display Name
@@ -2075,11 +2080,50 @@
         function previewAvatar(url) {
             var preview = document.getElementById('avatarPreview');
             if (!preview) return;
-            if (url && url.match(/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)/i)) {
+            if (url && url.match(/^https?:\/\/.+/i)) {
                 preview.innerHTML = '<img src="' + url + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'' + (currentEditPage?.name || 'P')[0].toUpperCase() + '\'">';
             } else {
                 preview.innerHTML = (currentEditPage?.name || 'P')[0].toUpperCase();
             }
+        }
+
+        function uploadAvatar(input) {
+            if (!input.files || !input.files[0]) return;
+
+            var file = input.files[0];
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('Error', 'Image must be less than 5MB', 'error');
+                return;
+            }
+
+            var preview = document.getElementById('avatarPreview');
+            var urlInput = document.getElementById('editPageAvatar');
+
+            // Show loading
+            preview.innerHTML = '<div style="font-size:0.7rem;">Loading...</div>';
+
+            var formData = new FormData();
+            formData.append('file', file);
+
+            fetch(API_BASE + '/api/upload/avatar', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.url) {
+                    urlInput.value = data.url;
+                    preview.innerHTML = '<img src="' + data.url + '" style="width:100%;height:100%;object-fit:cover;">';
+                    showToast('Uploaded!', 'Photo ready', 'success');
+                } else {
+                    throw new Error(data.error || 'Upload failed');
+                }
+            })
+            .catch(function(err) {
+                preview.innerHTML = (currentEditPage?.name || 'P')[0].toUpperCase();
+                showToast('Error', err.message || 'Upload failed', 'error');
+            });
         }
 
         function selectTheme(theme) {
