@@ -1742,7 +1742,7 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
   }
 });
 
-// Upload avatar image (uses Supabase Storage)
+// Upload avatar image (returns base64 data URL - no storage needed)
 app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1750,33 +1750,21 @@ app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req
     }
 
     const file = req.file;
-    const fileExt = file.originalname.split('.').pop() || 'jpg';
-    const fileName = `avatars/${req.userId}_${Date.now()}.${fileExt}`;
 
-    // Upload to Supabase Storage bucket "upload"
-    const { data, error } = await supabase.storage
-      .from('upload')
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        cacheControl: '3600',
-        upsert: true
-      });
-
-    if (error) {
-      console.error('Storage upload error:', error);
-      return res.status(500).json({ error: 'Erreur upload: ' + error.message });
+    // Compress image if too large (max 500KB for database storage)
+    if (file.size > 500 * 1024) {
+      return res.status(400).json({ error: 'Image trop volumineuse (max 500KB)' });
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('upload')
-      .getPublicUrl(fileName);
+    // Convert to base64 data URL
+    const base64 = file.buffer.toString('base64');
+    const dataUrl = `data:${file.mimetype};base64,${base64}`;
 
-    console.log('Avatar uploaded:', urlData.publicUrl);
+    console.log('Avatar converted to data URL, size:', Math.round(dataUrl.length / 1024) + 'KB');
 
     res.json({
       success: true,
-      url: urlData.publicUrl
+      url: dataUrl
     });
 
   } catch (error) {
