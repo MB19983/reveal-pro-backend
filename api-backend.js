@@ -1849,6 +1849,31 @@ app.get('/@:username', async (req, res) => {
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
+      ${page.theme === 'light' ? `
+      --purple: #a855f7;
+      --purple-dark: #7c3aed;
+      --bg-primary: #f8f9fa;
+      --bg-card: rgba(0,0,0,0.03);
+      --border: rgba(0,0,0,0.1);
+      --text: #1a1a2e;
+      --text-muted: rgba(0,0,0,0.6);
+      ` : page.theme === 'ocean' ? `
+      --purple: #06b6d4;
+      --purple-dark: #3b82f6;
+      --bg-primary: #0f172a;
+      --bg-card: rgba(255,255,255,0.03);
+      --border: rgba(255,255,255,0.08);
+      --text: #ffffff;
+      --text-muted: rgba(255,255,255,0.6);
+      ` : page.theme === 'sunset' ? `
+      --purple: #f97316;
+      --purple-dark: #ec4899;
+      --bg-primary: #1a1a2e;
+      --bg-card: rgba(255,255,255,0.03);
+      --border: rgba(255,255,255,0.08);
+      --text: #ffffff;
+      --text-muted: rgba(255,255,255,0.6);
+      ` : `
       --purple: #a855f7;
       --purple-dark: #7c3aed;
       --bg-primary: #0a0a0f;
@@ -1856,6 +1881,7 @@ app.get('/@:username', async (req, res) => {
       --border: rgba(255,255,255,0.08);
       --text: #ffffff;
       --text-muted: rgba(255,255,255,0.6);
+      `}
     }
 
     body {
@@ -1999,35 +2025,6 @@ app.get('/@:username', async (req, res) => {
       line-height: 1.6;
       max-width: 360px;
       margin: 0 auto;
-    }
-
-    /* Stats bar */
-    .stats {
-      display: flex;
-      justify-content: center;
-      gap: 32px;
-      margin-top: 20px;
-      padding: 16px 24px;
-      background: var(--bg-card);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-    }
-
-    .stat {
-      text-align: center;
-    }
-
-    .stat-value {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--purple);
-    }
-
-    .stat-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
 
     /* Links Section */
@@ -2201,7 +2198,6 @@ app.get('/@:username', async (req, res) => {
       .avatar { width: 96px; height: 96px; font-size: 2.4rem; }
       .name { font-size: 1.5rem; }
       .link-btn { padding: 16px 18px; font-size: 0.95rem; }
-      .stats { gap: 24px; padding: 14px 20px; }
     }
 
     /* Click ripple effect */
@@ -2223,7 +2219,14 @@ app.get('/@:username', async (req, res) => {
   <div class="bg-gradient"></div>
 
   <div class="particles">
-    ${Array(6).fill(0).map((_, i) => `<div class="particle" style="left:${15 + i * 15}%;animation-delay:${i * 3}s;animation-duration:${18 + i * 2}s;"></div>`).join('')}
+    ${Array(15).fill(0).map((_, i) => {
+      const size = 3 + Math.random() * 6;
+      const left = 5 + (i * 6) + Math.random() * 3;
+      const delay = i * 1.5 + Math.random() * 2;
+      const duration = 15 + Math.random() * 15;
+      const opacity = 0.15 + Math.random() * 0.25;
+      return `<div class="particle" style="left:${left}%;width:${size}px;height:${size}px;animation-delay:${delay}s;animation-duration:${duration}s;opacity:${opacity};"></div>`;
+    }).join('')}
   </div>
 
   <div class="container">
@@ -2236,17 +2239,6 @@ app.get('/@:username', async (req, res) => {
       <h1 class="name">${escapeHtml(page.name || page.username)}</h1>
       <div class="username">@${escapeHtml(page.username)}</div>
       ${page.bio ? `<p class="bio">${escapeHtml(page.bio)}</p>` : ''}
-
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-value">${links.length}</div>
-          <div class="stat-label">Links</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value">${page.total_views || 0}</div>
-          <div class="stat-label">Views</div>
-        </div>
-      </div>
     </div>
 
     <div class="links">
@@ -2566,6 +2558,40 @@ app.post('/api/qr', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Create QR code error:', error.message, error.stack);
     res.status(500).json({ error: 'Erreur serveur: ' + error.message });
+  }
+});
+
+// Update a QR code
+app.put('/api/qr/:qrId', authMiddleware, async (req, res) => {
+  try {
+    const { qrId } = req.params;
+    const { name, original_url, scan_threshold } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name.substring(0, 100);
+    if (original_url !== undefined) updates.original_url = original_url;
+    if (scan_threshold !== undefined) {
+      const threshold = parseInt(scan_threshold);
+      if (threshold >= 1 && threshold <= 100) {
+        updates.scan_threshold = threshold;
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('qr_codes')
+      .update(updates)
+      .eq('id', qrId)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, qr: data });
+
+  } catch (error) {
+    console.error('Update QR error:', error.message);
+    res.status(500).json({ error: 'Erreur mise à jour' });
   }
 });
 
