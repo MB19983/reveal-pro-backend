@@ -1742,7 +1742,7 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
   }
 });
 
-// Upload avatar image
+// Upload avatar image (uses imgbb free hosting)
 app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1750,33 +1750,35 @@ app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req
     }
 
     const file = req.file;
-    const fileExt = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const fileName = `avatars/${req.userId}/${Date.now()}${fileExt}`;
 
-    // Upload to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('uploads')
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        cacheControl: '3600',
-        upsert: false
-      });
+    // Convert buffer to base64
+    const base64Image = file.buffer.toString('base64');
 
-    if (error) {
-      console.error('Storage upload error:', error.message);
-      return res.status(500).json({ error: 'Erreur upload: ' + error.message });
+    // Upload to imgbb (free image hosting)
+    const imgbbApiKey = process.env.IMGBB_API_KEY || 'c4af8ef78906808aa07e57698fa28d09';
+
+    const formData = new URLSearchParams();
+    formData.append('key', imgbbApiKey);
+    formData.append('image', base64Image);
+    formData.append('name', `avatar_${req.userId}_${Date.now()}`);
+
+    const response = await fetch('https://api.imgbb.com/1/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      console.error('imgbb upload error:', result);
+      return res.status(500).json({ error: 'Erreur upload image' });
     }
 
-    // Get public URL
-    const { data: publicUrl } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(fileName);
-
-    console.log('Avatar uploaded:', fileName, publicUrl.publicUrl);
+    console.log('Avatar uploaded to imgbb:', result.data.url);
 
     res.json({
       success: true,
-      url: publicUrl.publicUrl
+      url: result.data.url
     });
 
   } catch (error) {
