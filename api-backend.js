@@ -34,38 +34,44 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// ============ SECURITY: Rate Limiting ============
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per 15 min per IP
-  message: { error: 'Trop de requêtes, réessayez plus tard' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // 50 login attempts per 15 min per IP
-  message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const createLinkLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20, // 20 link creations per hour
-  message: { error: 'Limite de création atteinte, réessayez plus tard' }
-});
-
-app.use(generalLimiter);
-
-// ============ SECURITY: CORS - Allow all origins for now ============
+// ============ SECURITY: CORS - MUST be before rate limiting ============
 app.use(cors({
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'stripe-signature'],
   credentials: true
 }));
+
+// Handle preflight requests
+app.options('*', cors());
+
+// ============ SECURITY: Rate Limiting ============
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // 500 requests per 15 min per IP (increased)
+  message: { error: 'Trop de requêtes, réessayez plus tard' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS'
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 login attempts per 15 min per IP
+  message: { error: 'Trop de tentatives, réessayez dans 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS'
+});
+
+const createLinkLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 50, // 50 link creations per hour
+  message: { error: 'Limite de création atteinte, réessayez plus tard' },
+  skip: (req) => req.method === 'OPTIONS'
+});
+
+app.use(generalLimiter);
 
 // ============ Stripe Configuration - PRODUCTION ============
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
