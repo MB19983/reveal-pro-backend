@@ -734,7 +734,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, plan, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, subscription_status, stripe_customer_id, notify_email')
+      .select('id, email, name, plan, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, threshold_links, threshold_pages, threshold_qr, subscription_status, stripe_customer_id, notify_email')
       .eq('id', req.userId)
       .single();
     
@@ -766,7 +766,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 app.put('/api/auth/settings', authMiddleware, async (req, res) => {
   try {
-    const { name, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, notify_email } = req.body;
+    const { name, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, notify_email, threshold_links, threshold_pages, threshold_qr } = req.body;
 
     const { data: currentUser } = await supabase
       .from('users')
@@ -793,12 +793,26 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
       }
     }
 
-    // Allow custom click threshold (1-100)
+    // Allow custom click threshold (1-100) - legacy
     if (click_threshold !== undefined) {
       const threshold = parseInt(click_threshold);
       if (threshold >= 1 && threshold <= 100) {
         updates.click_threshold = threshold;
       }
+    }
+
+    // New threshold fields for different alert types
+    if (threshold_links !== undefined) {
+      const val = parseInt(threshold_links);
+      if (val >= 1 && val <= 100) updates.threshold_links = val;
+    }
+    if (threshold_pages !== undefined) {
+      const val = parseInt(threshold_pages);
+      if (val >= 1 && val <= 100) updates.threshold_pages = val;
+    }
+    if (threshold_qr !== undefined) {
+      const val = parseInt(threshold_qr);
+      if (val >= 1 && val <= 100) updates.threshold_qr = val;
     }
 
     // Email alerts toggle
@@ -810,7 +824,7 @@ app.put('/api/auth/settings', authMiddleware, async (req, res) => {
       .from('users')
       .update(updates)
       .eq('id', req.userId)
-      .select('id, email, name, plan, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, subscription_status, notify_email')
+      .select('id, email, name, plan, whatsapp, whatsapp_number, notify_whatsapp, click_threshold, threshold_links, threshold_pages, threshold_qr, subscription_status, notify_email')
       .single();
 
     if (error) throw error;
@@ -2617,6 +2631,64 @@ app.get('/qr/:shortCode', async (req, res) => {
       user_agent: userAgent.substring(0, 500),
       is_bot: botInfo.isBot
     });
+
+    // Check for alerts (async, don't wait)
+    if (!botInfo.isBot) {
+      setImmediate(async () => {
+        try {
+          // Get user info
+          const { data: user } = await supabase
+            .from('users')
+            .select('id, email, plan, whatsapp, whatsapp_number, notify_whatsapp, notify_email, threshold_qr')
+            .eq('id', qrCode.user_id)
+            .single();
+
+          if (user) {
+            const threshold = user.threshold_qr || 2;
+
+            // Count total scans for this QR code
+            const { count: totalScans } = await supabase
+              .from('qr_scans')
+              .select('*', { count: 'exact', head: true })
+              .eq('qr_id', qrCode.id)
+              .eq('is_bot', false);
+
+            // Check if we should send alert
+            if (totalScans >= threshold && totalScans % threshold === 0) {
+              // Check if alert was already sent for this count
+              const { data: existingAlert } = await supabase
+                .from('alerts_sent')
+                .select('id')
+                .eq('qr_id', qrCode.id)
+                .eq('click_count', totalScans)
+                .single();
+
+              if (!existingAlert) {
+                // Send alerts
+                if (user.notify_email !== false && user.email) {
+                  await sendEmailAlert(qrCode.name || 'QR Code', 80, totalScans, { country: geoInfo.country, city: geoInfo.city, device_type: deviceInfo.deviceType }, user.email);
+                }
+
+                const whatsappNum = user.whatsapp_number || user.whatsapp;
+                if (user.notify_whatsapp && whatsappNum && user.plan === 'pro') {
+                  await sendWhatsAppAlert(qrCode.name || 'QR Code', 80, totalScans, whatsappNum);
+                }
+
+                // Record that we sent this alert
+                await supabase.from('alerts_sent').insert({
+                  user_id: user.id,
+                  qr_id: qrCode.id,
+                  intent_score: 80,
+                  click_count: totalScans
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error('QR alert error:', e.message);
+        }
+      });
+    }
 
     res.redirect(302, qrCode.original_url);
 
