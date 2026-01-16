@@ -1637,7 +1637,7 @@ app.get('/api/pages', authMiddleware, async (req, res) => {
 
     const pagesWithUrl = (pages || []).map(page => ({
       ...page,
-      pageUrl: `https://noly.pro/@${page.username}`
+      pageUrl: `https://noly.space/@${page.username}`
     }));
 
     res.json({ success: true, pages: pagesWithUrl });
@@ -1732,7 +1732,7 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
       success: true,
       page: {
         ...page,
-        pageUrl: `https://noly.pro/@${page.username}`
+        pageUrl: `https://noly.space/@${page.username}`
       }
     });
 
@@ -2456,7 +2456,7 @@ app.put('/api/pages/:pageId', authMiddleware, async (req, res) => {
       success: true,
       page: {
         ...page,
-        pageUrl: `https://noly.pro/@${page.username}`
+        pageUrl: `https://noly.space/@${page.username}`
       }
     });
 
