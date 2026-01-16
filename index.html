@@ -2369,12 +2369,18 @@
                     '</div>' +
                     '<div class="toggle' + (user.notify_email !== false ? ' active' : '') + '" id="toggleEmail"></div>' +
                 '</div>' +
-                '<div class="settings-item' + (isPro ? '' : ' disabled') + '">' +
-                    '<div class="settings-item-left">' +
-                        '<div class="settings-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>' +
-                        '<div class="settings-item-info"><div class="settings-item-title">WhatsApp Alerts</div><div class="settings-item-desc">' + (isPro ? 'Configure your number' : 'Pro plan only - Upgrade to unlock') + '</div></div>' +
+                '<div class="settings-item' + (isPro ? '' : ' disabled') + '" style="flex-direction:column;align-items:stretch;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;width:100%;">' +
+                        '<div class="settings-item-left">' +
+                            '<div class="settings-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>' +
+                            '<div class="settings-item-info"><div class="settings-item-title">WhatsApp Alerts</div><div class="settings-item-desc">' + (isPro ? 'Receive click alerts on WhatsApp' : 'Pro plan only - Upgrade to unlock') + '</div></div>' +
+                        '</div>' +
+                        (isPro ? '<div class="toggle' + (user.notify_whatsapp ? ' active' : '') + '" id="toggleWhatsapp"></div>' : '<span class="pro-badge" onclick="switchView(\'pricing\')">PRO</span>') +
                     '</div>' +
-                    (isPro ? '<div class="toggle" id="toggleWhatsapp"></div>' : '<span class="pro-badge" onclick="switchView(\'pricing\')">PRO</span>') +
+                    (isPro ? '<div id="whatsappConfig" style="margin-top:12px;display:' + (user.notify_whatsapp ? 'flex' : 'none') + ';gap:8px;align-items:center;">' +
+                        '<input type="tel" id="whatsappNumber" placeholder="+33612345678" value="' + escapeHTML(user.whatsapp_number || '') + '" style="flex:1;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">' +
+                        '<button class="btn btn-primary" id="saveWhatsappBtn" style="padding:12px 20px;">Save</button>' +
+                    '</div>' : '') +
                 '</div>' +
             '</div>' +
             '<div class="settings-section">' +
@@ -2413,7 +2419,76 @@
             }
 
             var toggleWhatsapp = document.getElementById('toggleWhatsapp');
-            if (toggleWhatsapp) toggleWhatsapp.addEventListener('click', function() { this.classList.toggle('active'); });
+            var whatsappConfig = document.getElementById('whatsappConfig');
+            if (toggleWhatsapp) {
+                toggleWhatsapp.addEventListener('click', function() {
+                    var toggle = this;
+                    var isActive = toggle.classList.toggle('active');
+
+                    // Show/hide config
+                    if (whatsappConfig) {
+                        whatsappConfig.style.display = isActive ? 'flex' : 'none';
+                    }
+
+                    // Save toggle state
+                    apiRequest('/api/auth/settings', {
+                        method: 'PUT',
+                        body: JSON.stringify({ notify_whatsapp: isActive })
+                    }).then(function(data) {
+                        if (data.success && data.user) {
+                            user.notify_whatsapp = data.user.notify_whatsapp;
+                            localStorage.setItem('noly_user', JSON.stringify(user));
+                            showToast('Saved', 'WhatsApp alerts ' + (isActive ? 'enabled' : 'disabled'), 'success');
+                        }
+                    }).catch(function() {
+                        toggle.classList.toggle('active');
+                        if (whatsappConfig) whatsappConfig.style.display = toggle.classList.contains('active') ? 'flex' : 'none';
+                        showToast('Error', 'Failed to save setting', 'error');
+                    });
+                });
+            }
+
+            var saveWhatsappBtn = document.getElementById('saveWhatsappBtn');
+            if (saveWhatsappBtn) {
+                saveWhatsappBtn.addEventListener('click', function() {
+                    var phoneInput = document.getElementById('whatsappNumber');
+                    var phone = phoneInput ? phoneInput.value.trim() : '';
+
+                    if (!phone) {
+                        showToast('Error', 'Please enter your WhatsApp number', 'error');
+                        return;
+                    }
+
+                    // Validate phone format
+                    if (!phone.match(/^\+?[0-9]{10,15}$/)) {
+                        showToast('Error', 'Invalid phone format. Use: +33612345678', 'error');
+                        return;
+                    }
+
+                    this.disabled = true;
+                    this.textContent = 'Saving...';
+                    var btn = this;
+
+                    apiRequest('/api/auth/settings', {
+                        method: 'PUT',
+                        body: JSON.stringify({ whatsapp_number: phone })
+                    }).then(function(data) {
+                        btn.disabled = false;
+                        btn.textContent = 'Save';
+                        if (data.success && data.user) {
+                            user.whatsapp_number = data.user.whatsapp_number;
+                            localStorage.setItem('noly_user', JSON.stringify(user));
+                            showToast('Saved', 'WhatsApp number updated', 'success');
+                        } else {
+                            showToast('Error', data.error || 'Failed to save', 'error');
+                        }
+                    }).catch(function() {
+                        btn.disabled = false;
+                        btn.textContent = 'Save';
+                        showToast('Error', 'Network error', 'error');
+                    });
+                });
+            }
         }
         
         // ==================== CREATE ====================
