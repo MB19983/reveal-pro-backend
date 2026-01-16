@@ -1742,7 +1742,7 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
   }
 });
 
-// Upload avatar image (uses imgbb free hosting)
+// Upload avatar image (uses Supabase Storage)
 app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1750,59 +1750,33 @@ app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req
     }
 
     const file = req.file;
+    const fileExt = file.originalname.split('.').pop() || 'jpg';
+    const fileName = `avatars/${req.userId}_${Date.now()}.${fileExt}`;
 
-    // Convert buffer to base64
-    const base64Image = file.buffer.toString('base64');
-
-    // Upload to imgbb (free image hosting)
-    const imgbbApiKey = process.env.IMGBB_API_KEY || 'c4af8ef78906808aa07e57698fa28d09';
-
-    const postData = `key=${imgbbApiKey}&image=${encodeURIComponent(base64Image)}&name=avatar_${req.userId}_${Date.now()}`;
-
-    // Use native https module for compatibility
-    const https = require('https');
-
-    const uploadPromise = new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.imgbb.com',
-        port: 443,
-        path: '/1/upload',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': Buffer.byteLength(postData)
-        }
-      };
-
-      const request = https.request(options, (response) => {
-        let data = '';
-        response.on('data', chunk => data += chunk);
-        response.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error('Invalid response from imgbb'));
-          }
-        });
+    // Upload to Supabase Storage bucket "upload"
+    const { data, error } = await supabase.storage
+      .from('upload')
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: true
       });
 
-      request.on('error', reject);
-      request.write(postData);
-      request.end();
-    });
-
-    const result = await uploadPromise;
-
-    if (!result.success) {
-      console.error('imgbb upload error:', result);
-      return res.status(500).json({ error: 'Erreur upload image' });
+    if (error) {
+      console.error('Storage upload error:', error);
+      return res.status(500).json({ error: 'Erreur upload: ' + error.message });
     }
 
-    console.log('Avatar uploaded to imgbb:', result.data.url);
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('upload')
+      .getPublicUrl(fileName);
+
+    console.log('Avatar uploaded:', urlData.publicUrl);
 
     res.json({
       success: true,
-      url: result.data.url
+      url: urlData.publicUrl
     });
 
   } catch (error) {
