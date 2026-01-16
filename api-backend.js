@@ -13,6 +13,8 @@ const jwt = require('jsonwebtoken');
 const Stripe = require('stripe');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const multer = require('multer');
+const path = require('path');
 
 const app = express();
 
@@ -226,6 +228,23 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
+// ============ Multer Configuration for File Uploads ============
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Type de fichier non autorisé. Utilisez JPG, PNG, GIF ou WebP.'), false);
+    }
+  }
+});
 
 // Plan limits
 const PLAN_LIMITS = {
@@ -1723,6 +1742,49 @@ app.post('/api/pages', authMiddleware, async (req, res) => {
   }
 });
 
+// Upload avatar image
+app.post('/api/upload/avatar', authMiddleware, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Aucun fichier fourni' });
+    }
+
+    const file = req.file;
+    const fileExt = path.extname(file.originalname).toLowerCase() || '.jpg';
+    const fileName = `avatars/${req.userId}/${Date.now()}${fileExt}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('uploads')
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error.message);
+      return res.status(500).json({ error: 'Erreur upload: ' + error.message });
+    }
+
+    // Get public URL
+    const { data: publicUrl } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(fileName);
+
+    console.log('Avatar uploaded:', fileName, publicUrl.publicUrl);
+
+    res.json({
+      success: true,
+      url: publicUrl.publicUrl
+    });
+
+  } catch (error) {
+    console.error('Upload error:', error.message);
+    res.status(500).json({ error: 'Erreur upload: ' + error.message });
+  }
+});
+
 // Get single page (public - for viewing)
 app.get('/api/pages/view/:username', async (req, res) => {
   try {
@@ -2975,7 +3037,20 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('Server error');
+  // Handle Multer errors
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'Fichier trop volumineux (max 5MB)' });
+    }
+    return res.status(400).json({ error: 'Erreur upload: ' + err.message });
+  }
+
+  // Handle custom file filter errors
+  if (err.message && err.message.includes('Type de fichier')) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  console.error('Server error:', err.message);
   res.status(500).json({ error: 'Erreur serveur' });
 });
 
