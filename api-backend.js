@@ -1741,6 +1741,11 @@ app.get('/@:username', async (req, res) => {
       `);
     }
 
+    // Get visitor info for personalization
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    const userAgent = req.headers['user-agent'] || '';
+    const isMobile = /Mobile|Android|iPhone/i.test(userAgent);
+
     // Increment view count (non-blocking)
     supabase.from('pages')
       .update({ total_views: (page.total_views || 0) + 1 })
@@ -1748,63 +1753,507 @@ app.get('/@:username', async (req, res) => {
       .then(() => {})
       .catch(e => console.log('View count update error:', e.message));
 
-    // Track page view (non-blocking, table might not exist)
+    // Track page view with device info
+    const deviceInfo = extractDeviceInfo(userAgent);
+    const geoInfo = getGeolocation(ip);
+
     supabase.from('page_views').insert({
       page_id: page.id,
-      ip_address: req.ip || 'unknown',
-      user_agent: req.get('User-Agent') || 'unknown',
-      referrer: req.get('Referer') || ''
+      ip_address: ip,
+      user_agent: userAgent.substring(0, 500),
+      referrer: req.get('Referer') || '',
+      country: geoInfo.country,
+      city: geoInfo.city,
+      device_type: deviceInfo.deviceType,
+      browser: deviceInfo.browser
     }).then(() => {}).catch(() => {});
 
     const links = Array.isArray(page.links) ? page.links : [];
-    const linksHtml = links.map(link => `
-      <a href="${escapeHtml(link.url || '#')}" target="_blank" rel="noopener" class="link-btn">
-        ${escapeHtml(link.title || link.url || 'Link')}
-      </a>
-    `).join('');
+    const baseUrl = process.env.BASE_URL || 'https://go.noly.pro';
+
+    // Generate links HTML with tracking and features
+    const linksHtml = links.map((link, index) => {
+      const trackUrl = `${baseUrl}/p/${page.id}/l/${index}`;
+      const isPriority = link.priority === true;
+      const isWhatsApp = link.type === 'whatsapp';
+      const isScheduled = link.startDate || link.endDate;
+
+      // Check if link should be visible (scheduling)
+      const now = new Date();
+      if (link.startDate && new Date(link.startDate) > now) return '';
+      if (link.endDate && new Date(link.endDate) < now) return '';
+
+      // WhatsApp link
+      if (isWhatsApp && link.phone) {
+        const waMessage = encodeURIComponent(link.message || 'Hello from your Noly page!');
+        const waUrl = `https://wa.me/${link.phone.replace(/[^0-9]/g, '')}?text=${waMessage}`;
+        return `
+          <a href="${waUrl}" target="_blank" rel="noopener" class="link-btn whatsapp" onclick="trackClick(${index})">
+            <span class="link-icon">💬</span>
+            <span class="link-text">${escapeHtml(link.title || 'WhatsApp')}</span>
+            <span class="link-arrow">→</span>
+          </a>
+        `;
+      }
+
+      return `
+        <a href="${trackUrl}" target="_blank" rel="noopener" class="link-btn${isPriority ? ' priority' : ''}" data-index="${index}">
+          ${link.icon ? `<span class="link-icon">${escapeHtml(link.icon)}</span>` : ''}
+          <span class="link-text">${escapeHtml(link.title || link.url || 'Link')}</span>
+          <span class="link-arrow">→</span>
+        </a>
+      `;
+    }).filter(Boolean).join('');
 
     const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${escapeHtml(page.name || page.username)} - Noly</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>${escapeHtml(page.name || page.username)} | Noly</title>
   <meta name="description" content="${escapeHtml(page.bio || 'Check out my links')}">
   <meta property="og:title" content="${escapeHtml(page.name || page.username)}">
   <meta property="og:description" content="${escapeHtml(page.bio || 'Check out my links')}">
+  <meta property="og:type" content="profile">
+  <meta name="twitter:card" content="summary">
   <link rel="icon" href="https://noly.pro/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f0f23 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px;}
-    .container{width:100%;max-width:480px;text-align:center;}
-    .avatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:white;margin:0 auto 16px;border:3px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(168,85,247,0.3);}
-    .avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;}
-    .name{font-size:1.5rem;font-weight:700;color:white;margin-bottom:8px;}
-    .bio{color:rgba(255,255,255,0.7);font-size:1rem;line-height:1.5;margin-bottom:32px;max-width:400px;margin-left:auto;margin-right:auto;}
-    .links{display:flex;flex-direction:column;gap:12px;}
-    .link-btn{display:block;padding:16px 24px;background:rgba(255,255,255,0.1);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:white;text-decoration:none;font-weight:500;font-size:1rem;transition:all 0.2s ease;text-align:center;}
-    .link-btn:hover{background:rgba(168,85,247,0.3);border-color:rgba(168,85,247,0.5);transform:translateY(-2px);box-shadow:0 8px 24px rgba(168,85,247,0.2);}
-    .footer{margin-top:48px;color:rgba(255,255,255,0.4);font-size:0.85rem;}
-    .footer a{color:rgba(168,85,247,0.8);text-decoration:none;}
-    .footer a:hover{color:#a855f7;}
-    .no-links{color:rgba(255,255,255,0.5);padding:32px;background:rgba(255,255,255,0.05);border-radius:12px;border:1px dashed rgba(255,255,255,0.1);}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple: #a855f7;
+      --purple-dark: #7c3aed;
+      --bg-primary: #0a0a0f;
+      --bg-card: rgba(255,255,255,0.03);
+      --border: rgba(255,255,255,0.08);
+      --text: #ffffff;
+      --text-muted: rgba(255,255,255,0.6);
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      min-height: 100vh;
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    .bg-gradient {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(124, 58, 237, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(168, 85, 247, 0.05) 0%, transparent 70%);
+      animation: gradientShift 15s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Floating particles */
+    .particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--purple);
+      border-radius: 50%;
+      opacity: 0.3;
+      animation: float 20s infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 0.3; }
+      90% { opacity: 0.3; }
+      100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+      padding: 48px 20px 32px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Profile Section */
+    .profile {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .avatar {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--purple), var(--purple-dark));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.8rem;
+      font-weight: 800;
+      color: white;
+      margin: 0 auto 20px;
+      border: 4px solid rgba(255,255,255,0.1);
+      box-shadow:
+        0 0 0 4px rgba(168, 85, 247, 0.2),
+        0 20px 60px rgba(168, 85, 247, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .avatar::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+      animation: shimmer 3s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%) rotate(45deg); }
+      100% { transform: translateX(100%) rotate(45deg); }
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .name {
+      font-size: 1.75rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.8) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .username {
+      color: var(--purple);
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .bio {
+      color: var(--text-muted);
+      font-size: 1rem;
+      line-height: 1.6;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    /* Stats bar */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-top: 20px;
+      padding: 16px 24px;
+      background: var(--bg-card);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--purple);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Links Section */
+    .links {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      flex: 1;
+    }
+
+    .link-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 22px;
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .link-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(124, 58, 237, 0.05));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .link-btn:hover {
+      transform: translateY(-3px) scale(1.01);
+      border-color: rgba(168, 85, 247, 0.4);
+      box-shadow:
+        0 10px 40px rgba(168, 85, 247, 0.2),
+        0 0 0 1px rgba(168, 85, 247, 0.1);
+    }
+
+    .link-btn:hover::before {
+      opacity: 1;
+    }
+
+    .link-btn:active {
+      transform: translateY(-1px) scale(0.99);
+    }
+
+    .link-icon {
+      font-size: 1.3rem;
+      width: 28px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .link-text {
+      flex: 1;
+      text-align: left;
+      position: relative;
+      z-index: 1;
+    }
+
+    .link-arrow {
+      color: var(--purple);
+      font-size: 1.1rem;
+      opacity: 0;
+      transform: translateX(-8px);
+      transition: all 0.3s;
+    }
+
+    .link-btn:hover .link-arrow {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* Priority Link - Animated */
+    .link-btn.priority {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(124, 58, 237, 0.1));
+      border-color: rgba(168, 85, 247, 0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .link-btn.priority::after {
+      content: '⭐';
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      font-size: 1.2rem;
+      animation: bounce 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(168, 85, 247, 0); }
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+
+    /* WhatsApp Button */
+    .link-btn.whatsapp {
+      background: linear-gradient(135deg, rgba(37, 211, 102, 0.15), rgba(37, 211, 102, 0.05));
+      border-color: rgba(37, 211, 102, 0.3);
+    }
+
+    .link-btn.whatsapp:hover {
+      border-color: rgba(37, 211, 102, 0.5);
+      box-shadow: 0 10px 40px rgba(37, 211, 102, 0.2);
+    }
+
+    .link-btn.whatsapp .link-icon {
+      color: #25D366;
+    }
+
+    /* No links state */
+    .no-links {
+      text-align: center;
+      padding: 40px;
+      background: var(--bg-card);
+      border-radius: 16px;
+      border: 2px dashed var(--border);
+      color: var(--text-muted);
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: auto;
+      padding-top: 40px;
+      text-align: center;
+    }
+
+    .footer-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+
+    .footer-brand:hover {
+      border-color: var(--purple);
+      color: var(--purple);
+    }
+
+    .footer-brand svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Mobile optimizations */
+    @media (max-width: 480px) {
+      .container { padding: 32px 16px 24px; }
+      .avatar { width: 96px; height: 96px; font-size: 2.4rem; }
+      .name { font-size: 1.5rem; }
+      .link-btn { padding: 16px 18px; font-size: 0.95rem; }
+      .stats { gap: 24px; padding: 14px 20px; }
+    }
+
+    /* Click ripple effect */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(168, 85, 247, 0.4);
+      transform: scale(0);
+      animation: ripple 0.6s linear;
+      pointer-events: none;
+    }
+
+    @keyframes ripple {
+      to { transform: scale(4); opacity: 0; }
+    }
   </style>
 </head>
 <body>
+  <div class="bg-gradient"></div>
+
+  <div class="particles">
+    ${Array(6).fill(0).map((_, i) => `<div class="particle" style="left:${15 + i * 15}%;animation-delay:${i * 3}s;animation-duration:${18 + i * 2}s;"></div>`).join('')}
+  </div>
+
   <div class="container">
-    <div class="avatar">
-      ${page.avatar_url ? `<img src="${escapeHtml(page.avatar_url)}" alt="${escapeHtml(page.name)}">` : (page.name || 'U')[0].toUpperCase()}
+    <div class="profile">
+      <div class="avatar">
+        ${page.avatar_url
+          ? `<img src="${escapeHtml(page.avatar_url)}" alt="${escapeHtml(page.name)}" loading="lazy">`
+          : (page.name || 'U')[0].toUpperCase()}
+      </div>
+      <h1 class="name">${escapeHtml(page.name || page.username)}</h1>
+      <div class="username">@${escapeHtml(page.username)}</div>
+      ${page.bio ? `<p class="bio">${escapeHtml(page.bio)}</p>` : ''}
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value">${links.length}</div>
+          <div class="stat-label">Links</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">${page.total_views || 0}</div>
+          <div class="stat-label">Views</div>
+        </div>
+      </div>
     </div>
-    <h1 class="name">${escapeHtml(page.name || page.username)}</h1>
-    <p class="bio">${escapeHtml(page.bio || '')}</p>
+
     <div class="links">
-      ${links.length > 0 ? linksHtml : '<div class="no-links">No links yet</div>'}
+      ${links.length > 0 ? linksHtml : '<div class="no-links">✨ Links coming soon...</div>'}
     </div>
+
     <div class="footer">
-      Powered by <a href="https://noly.pro" target="_blank">Noly</a>
+      <a href="https://noly.pro" target="_blank" class="footer-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        Create your Noly page
+      </a>
     </div>
   </div>
+
+  <script>
+    // Track link clicks
+    document.querySelectorAll('.link-btn').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        // Add ripple effect
+        const ripple = document.createElement('span');
+        ripple.classList.add('ripple');
+        const rect = this.getBoundingClientRect();
+        ripple.style.left = (e.clientX - rect.left) + 'px';
+        ripple.style.top = (e.clientY - rect.top) + 'px';
+        this.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+      });
+    });
+  </script>
 </body>
 </html>`;
 
@@ -1820,6 +2269,78 @@ app.get('/@:username', async (req, res) => {
       .box{text-align:center;padding:40px;}.title{font-size:2rem;margin-bottom:8px;color:#f00;}.text{color:#888;}</style>
       </head><body><div class="box"><div class="title">Error</div><div class="text">Something went wrong. Please try again later.</div></div></body></html>
     `);
+  }
+});
+
+// Track link clicks on Smart Page
+app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
+  try {
+    const { pageId, linkIndex } = req.params;
+    const idx = parseInt(linkIndex, 10);
+
+    const { data: page, error } = await supabase
+      .from('pages')
+      .select('links, user_id')
+      .eq('id', pageId)
+      .single();
+
+    if (error || !page || !page.links || !page.links[idx]) {
+      return res.status(404).send('Link not found');
+    }
+
+    const link = page.links[idx];
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    const userAgent = req.headers['user-agent'] || '';
+    const deviceInfo = extractDeviceInfo(userAgent);
+    const geoInfo = getGeolocation(ip);
+
+    // Track the link click
+    supabase.from('link_clicks').insert({
+      page_id: pageId,
+      link_index: idx,
+      link_title: link.title || '',
+      link_url: link.url || '',
+      ip_address: ip,
+      user_agent: userAgent.substring(0, 500),
+      country: geoInfo.country,
+      city: geoInfo.city,
+      device_type: deviceInfo.deviceType,
+      browser: deviceInfo.browser,
+      referrer: req.get('Referer') || ''
+    }).then(() => {}).catch(e => console.log('Link click track error:', e.message));
+
+    // Check for alert threshold (async)
+    setImmediate(async () => {
+      try {
+        const { count } = await supabase
+          .from('link_clicks')
+          .select('id', { count: 'exact' })
+          .eq('page_id', pageId)
+          .eq('link_index', idx);
+
+        // Alert every 5 clicks
+        if (count && count > 0 && count % 5 === 0) {
+          const { data: user } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', page.user_id)
+            .single();
+
+          if (user?.email) {
+            // Send alert email (implement sendEmailAlert if needed)
+            console.log(`Alert: ${link.title} reached ${count} clicks for user ${user.email}`);
+          }
+        }
+      } catch (e) {
+        console.log('Alert check error:', e.message);
+      }
+    });
+
+    res.redirect(302, link.url);
+
+  } catch (error) {
+    console.error('Link track error:', error.message);
+    res.status(500).send('Error');
   }
 });
 
