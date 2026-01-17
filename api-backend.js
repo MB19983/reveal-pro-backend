@@ -2862,18 +2862,18 @@ app.get('/:shortCode', async (req, res) => {
               
               const { data: user } = await supabase
                 .from('users')
-                .select('email, whatsapp, plan')
+                .select('email, whatsapp_number, notify_whatsapp, plan')
                 .eq('id', link.user_id)
                 .single();
-              
+
               if (user) {
                 const intentScore = calculateIntentScore(allClicks, threshold);
-                
+
                 if (user.email) {
                   await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
                 }
-                if (user.whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp);
+                if (user.whatsapp_number && user.notify_whatsapp && user.plan === 'pro') {
+                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp_number);
                 }
                 
                 await supabase.from('alerts_sent').insert({
@@ -2976,18 +2976,18 @@ app.get('/d/:shortCode', async (req, res) => {
               
               const { data: user } = await supabase
                 .from('users')
-                .select('email, whatsapp, plan')
+                .select('email, whatsapp_number, notify_whatsapp, plan')
                 .eq('id', link.user_id)
                 .single();
-              
+
               if (user) {
                 const intentScore = calculateIntentScore(allClicks, threshold);
-                
+
                 if (user.email) {
                   await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
                 }
-                if (user.whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp);
+                if (user.whatsapp_number && user.notify_whatsapp && user.plan === 'pro') {
+                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp_number);
                 }
                 
                 await supabase.from('alerts_sent').insert({

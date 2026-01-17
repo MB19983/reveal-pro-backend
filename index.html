@@ -2705,16 +2705,21 @@
             if (saveWhatsappBtn) {
                 saveWhatsappBtn.addEventListener('click', function() {
                     var phoneInput = document.getElementById('whatsappNumber');
-                    var phone = phoneInput ? phoneInput.value.trim() : '';
+                    var phone = phoneInput ? phoneInput.value.trim().replace(/\s+/g, '') : '';
 
                     if (!phone) {
                         showToast('Error', 'Please enter your WhatsApp number', 'error');
                         return;
                     }
 
-                    // Validate phone format
-                    if (!phone.match(/^\+?[0-9]{10,15}$/)) {
-                        showToast('Error', 'Invalid phone format. Use: +33612345678', 'error');
+                    // Add + if missing
+                    if (!phone.startsWith('+')) {
+                        phone = '+' + phone;
+                    }
+
+                    // Validate phone format (+ followed by 10-15 digits)
+                    if (!phone.match(/^\+[0-9]{10,15}$/)) {
+                        showToast('Error', 'Invalid format. Use: +33612345678', 'error');
                         return;
                     }
 
