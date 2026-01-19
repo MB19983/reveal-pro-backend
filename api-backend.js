@@ -2435,10 +2435,10 @@ app.get('/@:username', async (req, res) => {
           .filter(([_, url]) => url && url.trim())
           .map(([platform, url]) => {
             const icon = socialIcons[platform] || socialIcons.website;
-            return \`<a href="\${escapeHtml(url)}" target="_blank" rel="noopener" class="social-link" title="\${platform}">\${icon}</a>\`;
+            return '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener" class="social-link" title="' + platform + '">' + icon + '</a>';
           }).join('');
 
-        return socialLinks ? \`<div class="social-links">\${socialLinks}</div>\` : '';
+        return socialLinks ? '<div class="social-links">' + socialLinks + '</div>' : '';
       })()}
     </div>
 
