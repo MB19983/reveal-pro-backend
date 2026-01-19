@@ -2051,6 +2051,37 @@
                     '<input type="hidden" id="editPageTheme" value="' + (page.theme || 'dark') + '">' +
                 '</div>' +
 
+                // Social Links Section
+                '<div class="form-group" style="margin-bottom:24px;">' +
+                    '<label style="display:block;margin-bottom:12px;font-weight:600;">Social Links</label>' +
+                    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">' +
+                        '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">' +
+                            '<span style="font-size:1.1rem;">🐙</span>' +
+                            '<input type="url" class="form-input" id="socialGithub" style="flex:1;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + escapeHTML((page.social_links || {}).github || '') + '" placeholder="GitHub URL">' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">' +
+                            '<span style="font-size:1.1rem;">💼</span>' +
+                            '<input type="url" class="form-input" id="socialLinkedin" style="flex:1;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + escapeHTML((page.social_links || {}).linkedin || '') + '" placeholder="LinkedIn URL">' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">' +
+                            '<span style="font-size:1.1rem;">📸</span>' +
+                            '<input type="url" class="form-input" id="socialInstagram" style="flex:1;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + escapeHTML((page.social_links || {}).instagram || '') + '" placeholder="Instagram URL">' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">' +
+                            '<span style="font-size:1.1rem;">𝕏</span>' +
+                            '<input type="url" class="form-input" id="socialTwitter" style="flex:1;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + escapeHTML((page.social_links || {}).twitter || '') + '" placeholder="X/Twitter URL">' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">' +
+                            '<span style="font-size:1.1rem;">🦋</span>' +
+                            '<input type="url" class="form-input" id="socialBluesky" style="flex:1;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + escapeHTML((page.social_links || {}).bluesky || '') + '" placeholder="Bluesky URL">' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-card);padding:10px 12px;border-radius:10px;border:1px solid var(--border);">' +
+                            '<span style="font-size:1.1rem;">🌐</span>' +
+                            '<input type="url" class="form-input" id="socialWebsite" style="flex:1;padding:8px;border-radius:8px;font-size:0.85rem;" value="' + escapeHTML((page.social_links || {}).website || '') + '" placeholder="Website URL">' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+
                 // Links Section
                 '<div class="form-group" style="margin-bottom:20px;">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
@@ -2237,9 +2268,19 @@
                 }
             });
 
+            // Collect social links
+            var socialLinks = {
+                github: (document.getElementById('socialGithub') || {}).value || '',
+                linkedin: (document.getElementById('socialLinkedin') || {}).value || '',
+                instagram: (document.getElementById('socialInstagram') || {}).value || '',
+                twitter: (document.getElementById('socialTwitter') || {}).value || '',
+                bluesky: (document.getElementById('socialBluesky') || {}).value || '',
+                website: (document.getElementById('socialWebsite') || {}).value || ''
+            };
+
             apiRequest('/api/pages/' + currentEditPage.id, {
                 method: 'PUT',
-                body: JSON.stringify({name: name, bio: bio, links: links, avatar_url: avatarUrl, theme: theme})
+                body: JSON.stringify({name: name, bio: bio, links: links, avatar_url: avatarUrl, theme: theme, social_links: socialLinks})
             }).then(function(data) {
                 if (data.success) {
                     showToast('Saved!', 'Page updated', 'success');
