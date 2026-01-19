@@ -523,16 +523,30 @@ function calculateIntentScore(clicks, threshold) {
 }
 
 // Send WhatsApp alert
-async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp) {
+async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp, sourceType = 'link') {
   if (!twilioClient || !userWhatsapp) return false;
-  
+
   try {
-    const message = 'ALERTE NOLY\n\n' +
-      'Lien: ' + linkName + '\n' +
-      'Visites: ' + clickCount + '\n' +
-      'Score: ' + intentScore + '%\n\n' +
-      'Ce contact est tres interesse!\n' +
-      'Contactez-le maintenant.';
+    // Source type icons
+    const sourceIcons = {
+      'link': '🔗 Link',
+      'qr': '📱 QR Code',
+      'smartpage': '📄 Smart Page'
+    };
+    const sourceLabel = sourceIcons[sourceType] || '🔗 Link';
+
+    // Heat indicator based on score
+    let heatIndicator = '';
+    if (intentScore >= 85) heatIndicator = '🔥 HOT LEAD!';
+    else if (intentScore >= 50) heatIndicator = '🟡 Warm lead';
+    else heatIndicator = '🔵 Interested';
+
+    const message = '🔔 NOLY ALERT\n\n' +
+      '📊 ' + linkName + '\n' +
+      'Source: ' + sourceLabel + '\n' +
+      'Views: ' + clickCount + ' | Score: ' + intentScore + '%\n\n' +
+      heatIndicator + '\n' +
+      'Contact them now!';
 
     let whatsappNumber = userWhatsapp.trim();
     if (!whatsappNumber.startsWith('whatsapp:')) {
@@ -544,7 +558,7 @@ async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp
       from: process.env.TWILIO_WHATSAPP_FROM,
       to: whatsappNumber
     });
-    
+
     console.log('WhatsApp alert sent');
     return true;
   } catch (error) {
@@ -554,43 +568,63 @@ async function sendWhatsAppAlert(linkName, intentScore, clickCount, userWhatsapp
 }
 
 // Send Email alert
-async function sendEmailAlert(linkName, intentScore, clickCount, latestClick, userEmail) {
+async function sendEmailAlert(linkName, intentScore, clickCount, latestClick, userEmail, sourceType = 'link') {
   if (!userEmail) return false;
-  
+
   try {
+    // Source type labels
+    const sourceLabels = {
+      'link': '🔗 Link',
+      'qr': '📱 QR Code',
+      'smartpage': '📄 Smart Page'
+    };
+    const sourceLabel = sourceLabels[sourceType] || '🔗 Link';
+
+    // Heat indicator
+    let heatColor = '#667eea';
+    let heatText = 'Interested';
+    if (intentScore >= 85) {
+      heatColor = '#ff6b6b';
+      heatText = '🔥 HOT LEAD';
+    } else if (intentScore >= 50) {
+      heatColor = '#f59e0b';
+      heatText = '🟡 Warm Lead';
+    }
+
     await resend.emails.send({
-      from: 'Noly <alerte@noly.pro>',
+      from: 'Noly <alert@noly.pro>',
       to: userEmail,
-      subject: 'Alerte : ' + linkName + ' - ' + intentScore + '% interet',
+      subject: 'Alert: ' + linkName + ' - ' + intentScore + '% interest',
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">🔥 Prospect Chaud !</h1>
+            <h1 style="margin: 0; font-size: 24px;">${heatText}</h1>
           </div>
           <div style="background: #1a1a2e; padding: 30px; color: #e0e0e0; border-radius: 0 0 10px 10px;">
             <h2 style="color: #667eea; margin-top: 0;">${linkName}</h2>
+            <p style="color: #a855f7; font-size: 14px; margin-bottom: 20px;">Source: ${sourceLabel}</p>
             <div style="display: flex; gap: 20px; margin: 20px 0;">
               <div style="background: #252540; padding: 15px 25px; border-radius: 10px; text-align: center;">
                 <div style="font-size: 28px; font-weight: bold; color: #667eea;">${clickCount}</div>
-                <div style="color: #888; font-size: 14px;">Visites</div>
+                <div style="color: #888; font-size: 14px;">Views</div>
               </div>
               <div style="background: #252540; padding: 15px 25px; border-radius: 10px; text-align: center;">
-                <div style="font-size: 28px; font-weight: bold; color: #ff6b6b;">${intentScore}%</div>
+                <div style="font-size: 28px; font-weight: bold; color: ${heatColor};">${intentScore}%</div>
                 <div style="color: #888; font-size: 14px;">Score</div>
               </div>
             </div>
-            <p style="background: #252540; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
-              <strong>Contactez ce prospect maintenant !</strong><br>
-              Son niveau d'intérêt est élevé.
+            <p style="background: #252540; padding: 15px; border-radius: 8px; border-left: 4px solid ${heatColor};">
+              <strong>Contact this prospect now!</strong><br>
+              Their interest level is high.
             </p>
             <p style="color: #888; font-size: 12px; margin-top: 20px;">
-              Dernière visite: ${latestClick?.city || 'Inconnu'}, ${latestClick?.country || ''} - ${latestClick?.device_type || ''}
+              Latest visit: ${latestClick?.city || 'Unknown'}, ${latestClick?.country || ''} - ${latestClick?.device_type || ''}
             </p>
           </div>
         </div>
       `
     });
-    
+
     console.log('Email alert sent');
     return true;
   } catch (error) {
@@ -1849,6 +1883,59 @@ app.get('/@:username', async (req, res) => {
       browser: deviceInfo.browser
     }).then(() => {}).catch(() => {});
 
+    // Smart Page alert check (async)
+    setImmediate(async () => {
+      try {
+        const totalViews = (page.total_views || 0) + 1;
+        const threshold = 5; // Alert every 5 views
+
+        if (totalViews > 0 && totalViews % threshold === 0) {
+          // Check if alert was already sent for this view count
+          const { data: existingAlert } = await supabase
+            .from('alerts_sent')
+            .select('id')
+            .eq('link_id', page.id)
+            .eq('click_count', totalViews)
+            .single();
+
+          if (!existingAlert) {
+            // Get user info for alerts
+            const { data: user } = await supabase
+              .from('users')
+              .select('email, whatsapp_number, whatsapp_alerts_enabled, email_alerts_enabled')
+              .eq('id', page.user_id)
+              .single();
+
+            if (user) {
+              const pageName = page.name || '@' + page.username;
+              const intentScore = Math.min(40 + totalViews * 3, 100);
+              const latestView = { country: geoInfo.country, city: geoInfo.city, device_type: deviceInfo.deviceType };
+
+              // Send email alert
+              if (user.email && user.email_alerts_enabled !== false) {
+                await sendEmailAlert(pageName, intentScore, totalViews, latestView, user.email, 'smartpage');
+              }
+
+              // Send WhatsApp alert
+              if (user.whatsapp_number && user.whatsapp_alerts_enabled !== false) {
+                await sendWhatsAppAlert(pageName, intentScore, totalViews, user.whatsapp_number, 'smartpage');
+              }
+
+              // Record alert sent
+              await supabase.from('alerts_sent').insert({
+                user_id: page.user_id,
+                link_id: page.id,
+                intent_score: intentScore,
+                click_count: totalViews
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.log('Smart Page alert error:', e.message);
+      }
+    });
+
     const links = Array.isArray(page.links) ? page.links : [];
     const baseUrl = process.env.BASE_URL || 'https://go.noly.pro';
 
@@ -2748,12 +2835,12 @@ app.get('/qr/:shortCode', async (req, res) => {
               if (!existingAlert) {
                 // Send alerts
                 if (user.notify_email !== false && user.email) {
-                  await sendEmailAlert(qrCode.name || 'QR Code', 80, totalScans, { country: geoInfo.country, city: geoInfo.city, device_type: deviceInfo.deviceType }, user.email);
+                  await sendEmailAlert(qrCode.name || 'QR Code', 80, totalScans, { country: geoInfo.country, city: geoInfo.city, device_type: deviceInfo.deviceType }, user.email, 'qr');
                 }
 
                 const whatsappNum = user.whatsapp_number || user.whatsapp;
                 if (user.notify_whatsapp && whatsappNum && user.plan === 'pro') {
-                  await sendWhatsAppAlert(qrCode.name || 'QR Code', 80, totalScans, whatsappNum);
+                  await sendWhatsAppAlert(qrCode.name || 'QR Code', 80, totalScans, whatsappNum, 'qr');
                 }
 
                 // Record that we sent this alert
@@ -2870,12 +2957,12 @@ app.get('/:shortCode', async (req, res) => {
                 const intentScore = calculateIntentScore(allClicks, threshold);
 
                 if (user.email) {
-                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
+                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email, 'link');
                 }
                 if (user.whatsapp_number && user.notify_whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp_number);
+                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp_number, 'link');
                 }
-                
+
                 await supabase.from('alerts_sent').insert({
                   user_id: link.user_id,
                   link_id: link.id,
@@ -2890,7 +2977,7 @@ app.get('/:shortCode', async (req, res) => {
         }
       });
     }
-    
+
     res.redirect(302, link.original_url);
     
   } catch (error) {
@@ -2984,12 +3071,12 @@ app.get('/d/:shortCode', async (req, res) => {
                 const intentScore = calculateIntentScore(allClicks, threshold);
 
                 if (user.email) {
-                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email);
+                  await sendEmailAlert(link.name, intentScore, totalHumanClicks, humanClicks[0], user.email, 'link');
                 }
                 if (user.whatsapp_number && user.notify_whatsapp && user.plan === 'pro') {
-                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp_number);
+                  await sendWhatsAppAlert(link.name, intentScore, totalHumanClicks, user.whatsapp_number, 'link');
                 }
-                
+
                 await supabase.from('alerts_sent').insert({
                   user_id: link.user_id,
                   link_id: link.id,
@@ -3004,7 +3091,7 @@ app.get('/d/:shortCode', async (req, res) => {
         }
       });
     }
-    
+
     res.redirect(302, link.original_url);
     
   } catch (error) {
