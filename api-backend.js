@@ -2296,6 +2296,81 @@ app.put('/api/pages/:pageId', authMiddleware, async (req, res) => {
   }
 });
 
+// Get page analytics
+app.get('/api/pages/:pageId/analytics', authMiddleware, async (req, res) => {
+  try {
+    const { pageId } = req.params;
+
+    // Verify page belongs to user
+    const { data: page, error: pageError } = await supabase
+      .from('pages')
+      .select('id, total_views')
+      .eq('id', pageId)
+      .eq('user_id', req.userId)
+      .single();
+
+    if (pageError || !page) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+
+    // Get page views
+    const { data: views, error: viewsError } = await supabase
+      .from('page_views')
+      .select('*')
+      .eq('page_id', pageId)
+      .order('viewed_at', { ascending: false })
+      .limit(50);
+
+    if (viewsError) throw viewsError;
+
+    // Calculate analytics
+    const totalViews = page.total_views || 0;
+    const uniqueIps = [...new Set((views || []).map(v => v.ip_address).filter(Boolean))];
+    const uniqueVisitors = uniqueIps.length;
+
+    const mobileViews = (views || []).filter(v => v.is_mobile === true).length;
+    const desktopViews = (views || []).filter(v => v.is_mobile === false).length;
+
+    // Get link clicks from link_clicks table
+    const { data: linkClicks, error: clicksError } = await supabase
+      .from('link_clicks')
+      .select('id')
+      .eq('page_id', pageId);
+
+    const totalLinkClicks = linkClicks ? linkClicks.length : 0;
+
+    // Calculate intent score (based on return visitors and link clicks)
+    let intentScore = 0;
+    if (totalViews > 0) {
+      const clickRate = totalLinkClicks / totalViews;
+      const returnRate = uniqueVisitors > 0 ? (totalViews - uniqueVisitors) / totalViews : 0;
+      intentScore = Math.min(100, Math.round((clickRate * 50 + returnRate * 50) * 100));
+    }
+
+    res.json({
+      success: true,
+      analytics: {
+        totalViews,
+        uniqueVisitors,
+        intentScore,
+        linkClicks: totalLinkClicks,
+        mobileViews,
+        desktopViews,
+        recentViews: (views || []).slice(0, 10).map(v => ({
+          viewed_at: v.viewed_at,
+          is_mobile: v.is_mobile,
+          city: v.city,
+          country: v.country
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('Page analytics error:', error.message);
+    res.status(500).json({ error: 'Failed to get analytics' });
+  }
+});
+
 // Delete a page
 app.delete('/api/pages/:pageId', authMiddleware, async (req, res) => {
   try {
