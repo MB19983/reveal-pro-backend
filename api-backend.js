@@ -2313,31 +2313,39 @@ app.get('/api/pages/:pageId/analytics', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Page not found' });
     }
 
-    // Get page views
-    const { data: views, error: viewsError } = await supabase
-      .from('page_views')
-      .select('*')
-      .eq('page_id', pageId)
-      .order('viewed_at', { ascending: false })
-      .limit(50);
-
-    if (viewsError) throw viewsError;
+    // Get page views (ignore errors if table doesn't exist)
+    let views = [];
+    try {
+      const { data: viewsData } = await supabase
+        .from('page_views')
+        .select('*')
+        .eq('page_id', pageId)
+        .order('viewed_at', { ascending: false })
+        .limit(50);
+      views = viewsData || [];
+    } catch (e) {
+      console.log('page_views query failed:', e.message);
+    }
 
     // Calculate analytics
     const totalViews = page.total_views || 0;
-    const uniqueIps = [...new Set((views || []).map(v => v.ip_address).filter(Boolean))];
+    const uniqueIps = [...new Set(views.map(v => v.ip_address).filter(Boolean))];
     const uniqueVisitors = uniqueIps.length;
 
-    const mobileViews = (views || []).filter(v => v.is_mobile === true).length;
-    const desktopViews = (views || []).filter(v => v.is_mobile === false).length;
+    const mobileViews = views.filter(v => v.device_type === 'mobile' || v.device_type === 'tablet').length;
+    const desktopViews = views.filter(v => v.device_type === 'desktop').length;
 
-    // Get link clicks from link_clicks table
-    const { data: linkClicks, error: clicksError } = await supabase
-      .from('link_clicks')
-      .select('id')
-      .eq('page_id', pageId);
-
-    const totalLinkClicks = linkClicks ? linkClicks.length : 0;
+    // Get link clicks (ignore errors if table doesn't exist)
+    let totalLinkClicks = 0;
+    try {
+      const { data: linkClicks } = await supabase
+        .from('link_clicks')
+        .select('id')
+        .eq('page_id', pageId);
+      totalLinkClicks = linkClicks ? linkClicks.length : 0;
+    } catch (e) {
+      console.log('link_clicks query failed:', e.message);
+    }
 
     // Calculate intent score (based on return visitors and link clicks)
     let intentScore = 0;
@@ -2356,11 +2364,11 @@ app.get('/api/pages/:pageId/analytics', authMiddleware, async (req, res) => {
         linkClicks: totalLinkClicks,
         mobileViews,
         desktopViews,
-        recentViews: (views || []).slice(0, 10).map(v => ({
-          viewed_at: v.viewed_at,
-          is_mobile: v.is_mobile,
-          city: v.city,
-          country: v.country
+        recentViews: views.slice(0, 10).map(v => ({
+          viewed_at: v.viewed_at || v.created_at,
+          is_mobile: v.device_type === 'mobile' || v.device_type === 'tablet',
+          city: v.city || 'Unknown',
+          country: v.country || 'Unknown'
         }))
       }
     });
