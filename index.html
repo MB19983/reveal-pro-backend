@@ -1129,6 +1129,15 @@
         </div>
     </div>
 
+    <!-- Page Stats Modal -->
+    <div class="modal modal-large" id="pageStatsModal">
+        <button class="modal-close" onclick="closeAllModals()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <div class="modal-header"><div class="modal-title">Page Analytics</div></div>
+        <div class="modal-content" id="pageStatsContent">
+            <div class="loading-spinner">Loading analytics...</div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast" id="toast">
         <div class="toast-icon success" id="toastIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg></div>
@@ -1162,7 +1171,8 @@
             error: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>',
             trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>',
             drag: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>',
-            edit: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+            edit: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+            chart: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>'
         };
         
         // ==================== INIT ====================
@@ -1832,14 +1842,17 @@
                         '</div>' +
                     '</div>' +
 
-                    '<div style="display:flex;gap:10px;">' +
-                        '<button class="btn btn-secondary" style="flex:1;padding:12px;font-size:0.9rem;font-weight:600;border-radius:12px;" onclick="window.open(\'' + pageUrl + '\', \'_blank\')">' +
-                            '<span style="margin-right:6px;">&#128065;</span> View' +
+                    '<div style="display:flex;gap:8px;">' +
+                        '<button class="btn btn-secondary" style="flex:1;padding:10px;font-size:0.85rem;font-weight:600;border-radius:10px;" onclick="window.open(\'' + pageUrl + '\', \'_blank\')">' +
+                            '<span style="margin-right:5px;">&#128065;</span> View' +
                         '</button>' +
-                        '<button class="btn btn-primary" style="flex:1;padding:12px;font-size:0.9rem;font-weight:600;border-radius:12px;" onclick="openPageEditor(\'' + page.id + '\')">' +
-                            '<span style="margin-right:6px;">&#9998;</span> Edit' +
+                        '<button class="btn btn-primary" style="flex:1;padding:10px;font-size:0.85rem;font-weight:600;border-radius:10px;" onclick="openPageEditor(\'' + page.id + '\')">' +
+                            '<span style="margin-right:5px;">&#9998;</span> Edit' +
                         '</button>' +
-                        '<button class="btn" style="padding:12px 14px;background:var(--danger);color:white;border-radius:12px;" onclick="deletePage(\'' + page.id + '\')" title="Delete">' +
+                        '<button class="btn" style="flex:1;padding:10px;font-size:0.85rem;font-weight:600;border-radius:10px;background:var(--bg);border:1px solid var(--border);color:var(--text);" onclick="showPageStats(\'' + page.id + '\')">' +
+                            ICONS.chart + ' <span style="margin-left:5px;">Stats</span>' +
+                        '</button>' +
+                        '<button class="btn" style="padding:10px;background:var(--danger);color:white;border-radius:10px;" onclick="deletePage(\'' + page.id + '\')" title="Delete">' +
                             ICONS.trash +
                         '</button>' +
                     '</div>' +
@@ -1860,6 +1873,107 @@
                         showToast('Error', data.error || 'Failed', 'error');
                     }
                 });
+        }
+
+        function showPageStats(pageId) {
+            var page = pagesData.find(function(p) { return p.id === pageId; });
+            if (!page) return;
+
+            document.getElementById('pageStatsContent').innerHTML = '<div class="loading-spinner">Loading analytics...</div>';
+            openModal('pageStatsModal');
+
+            apiRequest('/api/pages/' + pageId + '/analytics')
+                .then(function(data) {
+                    if (data.success) {
+                        renderPageStats(page, data.analytics);
+                    } else {
+                        document.getElementById('pageStatsContent').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Failed to load analytics</div>';
+                    }
+                })
+                .catch(function() {
+                    document.getElementById('pageStatsContent').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Failed to load analytics</div>';
+                });
+        }
+
+        function renderPageStats(page, analytics) {
+            var a = analytics || {};
+            var html = '';
+
+            // Header
+            html += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);">' +
+                '<div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;color:white;">' +
+                    (page.name ? page.name[0].toUpperCase() : 'P') +
+                '</div>' +
+                '<div>' +
+                    '<div style="font-weight:700;font-size:1.2rem;color:var(--text);">' + escapeHTML(page.name || 'My Page') + '</div>' +
+                    '<div style="color:var(--purple);font-size:0.9rem;">@' + escapeHTML(page.username) + '</div>' +
+                '</div>' +
+            '</div>';
+
+            // Main stats
+            html += '<div class="analytics-grid">' +
+                '<div class="analytics-card"><div class="analytics-value purple">' + (a.totalViews || 0) + '</div><div class="analytics-label">Total Views</div></div>' +
+                '<div class="analytics-card"><div class="analytics-value blue">' + (a.uniqueVisitors || 0) + '</div><div class="analytics-label">Unique Visitors</div></div>' +
+                '<div class="analytics-card"><div class="analytics-value orange">' + (a.intentScore || 0) + '%</div><div class="analytics-label">Intent Score</div></div>' +
+                '<div class="analytics-card"><div class="analytics-value green">' + (a.linkClicks || 0) + '</div><div class="analytics-label">Link Clicks</div></div>' +
+            '</div>';
+
+            // Devices
+            html += '<div class="detail-section">' +
+                '<div class="detail-section-title">Devices</div>' +
+                '<div style="display:flex;gap:12px;">' +
+                    '<div class="analytics-card" style="flex:1;text-align:center;">' +
+                        '<div style="font-size:1.5rem;margin-bottom:8px;">📱</div>' +
+                        '<div class="analytics-value purple">' + (a.mobileViews || 0) + '</div>' +
+                        '<div class="analytics-label">Mobile</div>' +
+                    '</div>' +
+                    '<div class="analytics-card" style="flex:1;text-align:center;">' +
+                        '<div style="font-size:1.5rem;margin-bottom:8px;">💻</div>' +
+                        '<div class="analytics-value blue">' + (a.desktopViews || 0) + '</div>' +
+                        '<div class="analytics-label">Desktop</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+            // Recent views
+            if (a.recentViews && a.recentViews.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Recent Views</div>' +
+                    '<div style="max-height:200px;overflow-y:auto;">';
+
+                for (var i = 0; i < a.recentViews.length; i++) {
+                    var view = a.recentViews[i];
+                    html += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:10px;margin-bottom:8px;">' +
+                        '<span style="font-size:1.2rem;">' + (view.is_mobile ? '📱' : '💻') + '</span>' +
+                        '<div style="flex:1;">' +
+                            '<div style="font-size:0.85rem;color:var(--text);">' + escapeHTML(view.city || 'Unknown') + ', ' + escapeHTML(view.country || 'Unknown') + '</div>' +
+                            '<div style="font-size:0.75rem;color:var(--text-muted);">' + formatTimeAgo(view.viewed_at) + '</div>' +
+                        '</div>' +
+                    '</div>';
+                }
+
+                html += '</div></div>';
+            } else {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Recent Views</div>' +
+                    '<div style="text-align:center;padding:20px;color:var(--text-muted);">No views yet</div>' +
+                '</div>';
+            }
+
+            document.getElementById('pageStatsContent').innerHTML = html;
+        }
+
+        function formatTimeAgo(dateStr) {
+            if (!dateStr) return 'Unknown';
+            var date = new Date(dateStr);
+            var now = new Date();
+            var diff = Math.floor((now - date) / 1000);
+
+            if (diff < 60) return 'Just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+            return date.toLocaleDateString();
         }
 
         var currentEditPage = null;
