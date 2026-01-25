@@ -2029,26 +2029,34 @@
 
                 // Theme Selector
                 '<div class="form-group" style="margin-bottom:24px;">' +
-                    '<label style="display:block;margin-bottom:8px;font-weight:600;">Theme</label>' +
-                    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">' +
-                        '<button type="button" class="theme-btn' + ((!page.theme || page.theme === 'dark') ? ' active' : '') + '" data-theme="dark" onclick="selectTheme(\'dark\')" style="padding:12px;border-radius:12px;border:2px solid ' + ((!page.theme || page.theme === 'dark') ? 'var(--purple)' : 'var(--border)') + ';background:#0a0a0f;cursor:pointer;">' +
-                            '<div style="width:100%;height:24px;border-radius:6px;background:linear-gradient(135deg,#a855f7,#7c3aed);margin-bottom:6px;"></div>' +
-                            '<span style="font-size:0.75rem;color:#fff;">Dark</span>' +
+                    '<label style="display:block;margin-bottom:10px;font-weight:600;">Theme</label>' +
+                    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">' +
+                        '<button type="button" class="theme-btn" data-theme="nature" onclick="selectTheme(\'nature\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'nature') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Nature</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn' + ((page.theme === 'light') ? ' active' : '') + '" data-theme="light" onclick="selectTheme(\'light\')" style="padding:12px;border-radius:12px;border:2px solid ' + ((page.theme === 'light') ? 'var(--purple)' : 'var(--border)') + ';background:#f8f9fa;cursor:pointer;">' +
-                            '<div style="width:100%;height:24px;border-radius:6px;background:linear-gradient(135deg,#a855f7,#7c3aed);margin-bottom:6px;"></div>' +
-                            '<span style="font-size:0.75rem;color:#333;">Light</span>' +
+                        '<button type="button" class="theme-btn" data-theme="ocean" onclick="selectTheme(\'ocean\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'ocean') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Ocean</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn' + ((page.theme === 'ocean') ? ' active' : '') + '" data-theme="ocean" onclick="selectTheme(\'ocean\')" style="padding:12px;border-radius:12px;border:2px solid ' + ((page.theme === 'ocean') ? 'var(--purple)' : 'var(--border)') + ';background:#0f172a;cursor:pointer;">' +
-                            '<div style="width:100%;height:24px;border-radius:6px;background:linear-gradient(135deg,#06b6d4,#3b82f6);margin-bottom:6px;"></div>' +
-                            '<span style="font-size:0.75rem;color:#fff;">Ocean</span>' +
+                        '<button type="button" class="theme-btn" data-theme="desert" onclick="selectTheme(\'desert\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'desert') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Desert</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn' + ((page.theme === 'sunset') ? ' active' : '') + '" data-theme="sunset" onclick="selectTheme(\'sunset\')" style="padding:12px;border-radius:12px;border:2px solid ' + ((page.theme === 'sunset') ? 'var(--purple)' : 'var(--border)') + ';background:#1a1a2e;cursor:pointer;">' +
-                            '<div style="width:100%;height:24px;border-radius:6px;background:linear-gradient(135deg,#f97316,#ec4899);margin-bottom:6px;"></div>' +
-                            '<span style="font-size:0.75rem;color:#fff;">Sunset</span>' +
+                        '<button type="button" class="theme-btn" data-theme="city" onclick="selectTheme(\'city\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'city') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">City</span>' +
+                        '</button>' +
+                        '<button type="button" class="theme-btn" data-theme="minimal" onclick="selectTheme(\'minimal\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'minimal') ? 'var(--purple)' : 'var(--border)') + ';background:#f5f5f5;cursor:pointer;height:60px;position:relative;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#333;">Minimal</span>' +
+                        '</button>' +
+                        '<button type="button" class="theme-btn" data-theme="dark" onclick="selectTheme(\'dark\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((!page.theme || page.theme === 'dark') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a1a2e,#16213e);cursor:pointer;height:60px;position:relative;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;">Dark</span>' +
                         '</button>' +
                     '</div>' +
                     '<input type="hidden" id="editPageTheme" value="' + (page.theme || 'dark') + '">' +
+                '</div>' +
+                // Custom Background
+                '<div class="form-group" style="margin-bottom:24px;">' +
+                    '<label style="display:block;margin-bottom:8px;font-weight:600;">Custom Background (optional)</label>' +
+                    '<input type="url" class="form-input" id="editPageBackground" style="padding:12px;border-radius:10px;font-size:0.9rem;" value="' + escapeHTML(page.background_url || '') + '" placeholder="Paste image URL...">' +
+                    '<span style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;display:block;">Leave empty to use theme default</span>' +
                 '</div>' +
 
                 // Social Links Section
@@ -2278,9 +2286,11 @@
                 website: (document.getElementById('socialWebsite') || {}).value || ''
             };
 
+            var backgroundUrl = (document.getElementById('editPageBackground') || {}).value || '';
+
             apiRequest('/api/pages/' + currentEditPage.id, {
                 method: 'PUT',
-                body: JSON.stringify({name: name, bio: bio, links: links, avatar_url: avatarUrl, theme: theme, social_links: socialLinks})
+                body: JSON.stringify({name: name, bio: bio, links: links, avatar_url: avatarUrl, theme: theme, social_links: socialLinks, background_url: backgroundUrl})
             }).then(function(data) {
                 if (data.success) {
                     showToast('Saved!', 'Page updated', 'success');
