@@ -2234,7 +2234,8 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
 
         if (!user) return;
 
-        const threshold = user.threshold_pages || 5;
+        // Use link-specific threshold, fallback to user setting, then default
+        const threshold = link.alert_threshold || user.threshold_pages || 5;
         const linkName = link.title || 'Link ' + (idx + 1);
         const pageName = page.name || 'Smart Page';
         const alertName = pageName + ' - ' + linkName;
