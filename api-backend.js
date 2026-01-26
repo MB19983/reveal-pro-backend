@@ -2218,6 +2218,8 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
     // Check for alert threshold and send alerts (async)
     setImmediate(async () => {
       try {
+        console.log('Smart Page Alert Check - PageId:', pageId, 'UserId:', page.user_id);
+
         // Get click count for this specific link
         const { count, error: countError } = await supabase
           .from('link_clicks')
@@ -2226,17 +2228,26 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
           .eq('link_index', idx);
 
         const clickCount = count || 0;
-        console.log('Smart Page Link Alert - Count:', clickCount, 'PageId:', pageId, 'LinkIdx:', idx);
+        console.log('Smart Page Link Alert - Count:', clickCount, 'LinkIdx:', idx);
+
+        if (!page.user_id) {
+          console.log('ERROR: page.user_id is missing!');
+          return;
+        }
 
         // Get user settings
-        const { data: user } = await supabase
+        const { data: user, error: userError } = await supabase
           .from('users')
           .select('email, whatsapp_number, email_alerts_enabled, whatsapp_alerts_enabled, threshold_pages, plan')
           .eq('id', page.user_id)
           .single();
 
+        if (userError) {
+          console.log('User query error:', userError.message);
+        }
+
         if (!user) {
-          console.log('User not found for alerts');
+          console.log('User not found for alerts - user_id:', page.user_id);
           return;
         }
 
