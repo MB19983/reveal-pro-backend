@@ -1935,6 +1935,36 @@
                 '</div>' +
             '</div>';
 
+            // Link clicks detail
+            if (a.linkClicksDetail && a.linkClicksDetail.length > 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Link Performance</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:8px;">';
+
+                for (var j = 0; j < a.linkClicksDetail.length; j++) {
+                    var linkStat = a.linkClicksDetail[j];
+                    var maxClicks = a.linkClicksDetail[0].clicks;
+                    var barWidth = maxClicks > 0 ? Math.round((linkStat.clicks / maxClicks) * 100) : 0;
+
+                    html += '<div style="background:var(--bg);border-radius:10px;padding:12px;">' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                            '<span style="font-size:0.85rem;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">' + escapeHTML(linkStat.title) + '</span>' +
+                            '<span style="font-size:0.9rem;font-weight:700;color:var(--purple);">' + linkStat.clicks + '</span>' +
+                        '</div>' +
+                        '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
+                            '<div style="height:100%;width:' + barWidth + '%;background:linear-gradient(90deg,#a855f7,#7c3aed);border-radius:3px;"></div>' +
+                        '</div>' +
+                    '</div>';
+                }
+
+                html += '</div></div>';
+            } else if (a.linkClicks === 0) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-title">Link Performance</div>' +
+                    '<div style="text-align:center;padding:20px;color:var(--text-muted);">No link clicks yet</div>' +
+                '</div>';
+            }
+
             // Recent views
             if (a.recentViews && a.recentViews.length > 0) {
                 html += '<div class="detail-section">' +

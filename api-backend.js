@@ -2337,12 +2337,34 @@ app.get('/api/pages/:pageId/analytics', authMiddleware, async (req, res) => {
 
     // Get link clicks (ignore errors if table doesn't exist)
     let totalLinkClicks = 0;
+    let linkClicksDetail = [];
     try {
       const { data: linkClicks } = await supabase
         .from('link_clicks')
-        .select('id')
+        .select('link_index, link_title, link_url')
         .eq('page_id', pageId);
-      totalLinkClicks = linkClicks ? linkClicks.length : 0;
+
+      if (linkClicks && linkClicks.length > 0) {
+        totalLinkClicks = linkClicks.length;
+
+        // Group by link_index
+        const clicksByLink = {};
+        linkClicks.forEach(click => {
+          const key = click.link_index;
+          if (!clicksByLink[key]) {
+            clicksByLink[key] = {
+              index: click.link_index,
+              title: click.link_title || 'Link ' + (click.link_index + 1),
+              url: click.link_url || '',
+              clicks: 0
+            };
+          }
+          clicksByLink[key].clicks++;
+        });
+
+        // Convert to array and sort by clicks
+        linkClicksDetail = Object.values(clicksByLink).sort((a, b) => b.clicks - a.clicks);
+      }
     } catch (e) {
       console.log('link_clicks query failed:', e.message);
     }
@@ -2362,6 +2384,7 @@ app.get('/api/pages/:pageId/analytics', authMiddleware, async (req, res) => {
         uniqueVisitors,
         intentScore,
         linkClicks: totalLinkClicks,
+        linkClicksDetail,
         mobileViews,
         desktopViews,
         recentViews: views.slice(0, 10).map(v => ({
