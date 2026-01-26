@@ -2020,53 +2020,75 @@ app.get('/@:username', async (req, res) => {
     .lava-bg{
       position:fixed;top:0;left:0;right:0;bottom:0;
       overflow:hidden;z-index:0;
-      filter:blur(80px);
     }
     .blob{
       position:absolute;
-      border-radius:50%;
-      animation:float 20s ease-in-out infinite;
+      border-radius:45% 55% 60% 40% / 50% 45% 55% 50%;
+      background:radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 15%, transparent 40%),
+                 radial-gradient(ellipse at 70% 80%, rgba(0,0,0,0.2) 0%, transparent 50%),
+                 linear-gradient(180deg, var(--blob-light) 0%, var(--blob-color) 50%, var(--blob-dark) 100%);
+      box-shadow: 0 0 40px var(--blob-glow), inset 0 -20px 40px var(--blob-dark), inset 0 20px 40px var(--blob-light);
+      animation:rise 15s ease-in-out infinite;
     }
     .blob-1{
-      width:300px;height:300px;
-      background:${lava.blob1};
-      left:10%;top:20%;
-      animation-delay:0s;
-      opacity:0.7;
+      --blob-color:${lava.blob1};
+      --blob-light:${lava.blob1}cc;
+      --blob-dark:${lava.blob1}66;
+      --blob-glow:${lava.blob1}88;
+      width:120px;height:140px;
+      left:15%;bottom:-150px;
+      animation-duration:18s;
     }
     .blob-2{
-      width:250px;height:250px;
-      background:${lava.blob2};
-      right:10%;top:50%;
-      animation-delay:-5s;
-      opacity:0.6;
+      --blob-color:${lava.blob2};
+      --blob-light:${lava.blob2}cc;
+      --blob-dark:${lava.blob2}66;
+      --blob-glow:${lava.blob2}88;
+      width:80px;height:100px;
+      left:60%;bottom:-120px;
+      animation-delay:-4s;
+      animation-duration:14s;
+      border-radius:50% 50% 45% 55% / 55% 50% 50% 45%;
     }
     .blob-3{
-      width:200px;height:200px;
-      background:${lava.blob3};
-      left:30%;bottom:10%;
-      animation-delay:-10s;
-      opacity:0.7;
+      --blob-color:${lava.blob3};
+      --blob-light:${lava.blob3}cc;
+      --blob-dark:${lava.blob3}66;
+      --blob-glow:${lava.blob3}88;
+      width:100px;height:120px;
+      left:35%;bottom:-130px;
+      animation-delay:-8s;
+      animation-duration:16s;
+      border-radius:55% 45% 50% 50% / 45% 55% 45% 55%;
     }
     .blob-4{
-      width:180px;height:180px;
-      background:${lava.blob1};
-      right:20%;bottom:30%;
-      animation-delay:-15s;
-      opacity:0.5;
+      --blob-color:${lava.blob1};
+      --blob-light:${lava.blob1}cc;
+      --blob-dark:${lava.blob1}66;
+      --blob-glow:${lava.blob1}88;
+      width:60px;height:80px;
+      right:15%;bottom:-100px;
+      animation-delay:-12s;
+      animation-duration:20s;
+      border-radius:48% 52% 55% 45% / 52% 48% 52% 48%;
     }
     .blob-5{
-      width:150px;height:150px;
-      background:${lava.blob2};
-      left:5%;top:60%;
-      animation-delay:-8s;
-      opacity:0.6;
+      --blob-color:${lava.blob2};
+      --blob-light:${lava.blob2}cc;
+      --blob-dark:${lava.blob2}66;
+      --blob-glow:${lava.blob2}88;
+      width:90px;height:110px;
+      left:5%;bottom:-120px;
+      animation-delay:-6s;
+      animation-duration:17s;
+      border-radius:52% 48% 45% 55% / 48% 52% 48% 52%;
     }
-    @keyframes float{
-      0%,100%{transform:translate(0,0) scale(1)}
-      25%{transform:translate(50px,-80px) scale(1.1)}
-      50%{transform:translate(-30px,-120px) scale(0.9)}
-      75%{transform:translate(80px,-40px) scale(1.05)}
+    @keyframes rise{
+      0%{transform:translateY(0) scale(1) rotate(0deg);opacity:0}
+      5%{opacity:1}
+      50%{transform:translateY(-100vh) scale(1.1) rotate(5deg);opacity:1}
+      95%{opacity:1}
+      100%{transform:translateY(-200vh) scale(0.9) rotate(-5deg);opacity:0}
     }
     .container{
       position:relative;z-index:1;

@@ -2178,24 +2178,30 @@
                 // Theme Selector
                 '<div class="form-group" style="margin-bottom:24px;">' +
                     '<label style="display:block;margin-bottom:10px;font-weight:600;">Theme Lava Lamp</label>' +
-                    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">' +
-                        '<button type="button" class="theme-btn" data-theme="lava-red" onclick="selectTheme(\'lava-red\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-red') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a0a0a,#ff4444,#ff8800);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Rouge</span>' +
+                    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">' +
+                        '<button type="button" class="theme-btn" data-theme="lava-red" onclick="selectTheme(\'lava-red\')" style="padding:8px;border-radius:12px;border:3px solid ' + ((page.theme === 'lava-red') ? '#a855f7' : 'transparent') + ';background:linear-gradient(135deg,#1a0a0a,#ff4444,#ff8800);cursor:pointer;height:65px;position:relative;overflow:hidden;box-shadow:' + ((page.theme === 'lava-red') ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none') + ';transition:all 0.2s ease;">' +
+                            '<span class="theme-check" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:#a855f7;border-radius:50%;display:' + ((page.theme === 'lava-red') ? 'flex' : 'none') + ';align-items:center;justify-content:center;font-size:12px;color:#fff;">✓</span>' +
+                            '<span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:0.75rem;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);font-weight:600;">Rouge</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="lava-blue" onclick="selectTheme(\'lava-blue\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-blue') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#0a0a1a,#4444ff,#44aaff);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Bleu</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-blue" onclick="selectTheme(\'lava-blue\')" style="padding:8px;border-radius:12px;border:3px solid ' + ((page.theme === 'lava-blue') ? '#a855f7' : 'transparent') + ';background:linear-gradient(135deg,#0a0a1a,#4444ff,#44aaff);cursor:pointer;height:65px;position:relative;overflow:hidden;box-shadow:' + ((page.theme === 'lava-blue') ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none') + ';transition:all 0.2s ease;">' +
+                            '<span class="theme-check" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:#a855f7;border-radius:50%;display:' + ((page.theme === 'lava-blue') ? 'flex' : 'none') + ';align-items:center;justify-content:center;font-size:12px;color:#fff;">✓</span>' +
+                            '<span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:0.75rem;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);font-weight:600;">Bleu</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="lava-green" onclick="selectTheme(\'lava-green\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-green') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#0a1a0a,#44ff44,#00ff88);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Vert</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-green" onclick="selectTheme(\'lava-green\')" style="padding:8px;border-radius:12px;border:3px solid ' + ((page.theme === 'lava-green') ? '#a855f7' : 'transparent') + ';background:linear-gradient(135deg,#0a1a0a,#44ff44,#00ff88);cursor:pointer;height:65px;position:relative;overflow:hidden;box-shadow:' + ((page.theme === 'lava-green') ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none') + ';transition:all 0.2s ease;">' +
+                            '<span class="theme-check" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:#a855f7;border-radius:50%;display:' + ((page.theme === 'lava-green') ? 'flex' : 'none') + ';align-items:center;justify-content:center;font-size:12px;color:#fff;">✓</span>' +
+                            '<span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:0.75rem;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);font-weight:600;">Vert</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="lava-pink" onclick="selectTheme(\'lava-pink\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-pink') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a0a1a,#ff44aa,#aa44ff);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Rose</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-pink" onclick="selectTheme(\'lava-pink\')" style="padding:8px;border-radius:12px;border:3px solid ' + ((page.theme === 'lava-pink') ? '#a855f7' : 'transparent') + ';background:linear-gradient(135deg,#1a0a1a,#ff44aa,#aa44ff);cursor:pointer;height:65px;position:relative;overflow:hidden;box-shadow:' + ((page.theme === 'lava-pink') ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none') + ';transition:all 0.2s ease;">' +
+                            '<span class="theme-check" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:#a855f7;border-radius:50%;display:' + ((page.theme === 'lava-pink') ? 'flex' : 'none') + ';align-items:center;justify-content:center;font-size:12px;color:#fff;">✓</span>' +
+                            '<span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:0.75rem;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);font-weight:600;">Rose</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="lava-gold" onclick="selectTheme(\'lava-gold\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-gold') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a1400,#ffcc00,#ff8800);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Or</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-gold" onclick="selectTheme(\'lava-gold\')" style="padding:8px;border-radius:12px;border:3px solid ' + ((page.theme === 'lava-gold') ? '#a855f7' : 'transparent') + ';background:linear-gradient(135deg,#1a1400,#ffcc00,#ff8800);cursor:pointer;height:65px;position:relative;overflow:hidden;box-shadow:' + ((page.theme === 'lava-gold') ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none') + ';transition:all 0.2s ease;">' +
+                            '<span class="theme-check" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:#a855f7;border-radius:50%;display:' + ((page.theme === 'lava-gold') ? 'flex' : 'none') + ';align-items:center;justify-content:center;font-size:12px;color:#fff;">✓</span>' +
+                            '<span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:0.75rem;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);font-weight:600;">Or</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="lava-purple" onclick="selectTheme(\'lava-purple\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((!page.theme || page.theme === 'lava-purple') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#0f0a1a,#8844ff,#aa44ff);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Violet</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-purple" onclick="selectTheme(\'lava-purple\')" style="padding:8px;border-radius:12px;border:3px solid ' + ((!page.theme || page.theme === 'lava-purple') ? '#a855f7' : 'transparent') + ';background:linear-gradient(135deg,#0f0a1a,#8844ff,#aa44ff);cursor:pointer;height:65px;position:relative;overflow:hidden;box-shadow:' + ((!page.theme || page.theme === 'lava-purple') ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none') + ';transition:all 0.2s ease;">' +
+                            '<span class="theme-check" style="position:absolute;top:6px;right:6px;width:20px;height:20px;background:#a855f7;border-radius:50%;display:' + ((!page.theme || page.theme === 'lava-purple') ? 'flex' : 'none') + ';align-items:center;justify-content:center;font-size:12px;color:#fff;">✓</span>' +
+                            '<span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:0.75rem;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.9);font-weight:600;">Violet</span>' +
                         '</button>' +
                     '</div>' +
                     '<input type="hidden" id="editPageTheme" value="' + (page.theme || 'lava-purple') + '">' +
@@ -2351,7 +2357,13 @@
         function selectTheme(theme) {
             document.getElementById('editPageTheme').value = theme;
             document.querySelectorAll('.theme-btn').forEach(function(btn) {
-                btn.style.borderColor = btn.dataset.theme === theme ? 'var(--purple)' : 'var(--border)';
+                var isSelected = btn.dataset.theme === theme;
+                btn.style.borderColor = isSelected ? '#a855f7' : 'transparent';
+                btn.style.boxShadow = isSelected ? '0 0 15px #a855f7, inset 0 0 0 2px rgba(255,255,255,0.3)' : 'none';
+                var check = btn.querySelector('.theme-check');
+                if (check) {
+                    check.style.display = isSelected ? 'flex' : 'none';
+                }
             });
         }
 
