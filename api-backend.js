@@ -1964,30 +1964,19 @@ app.get('/@:username', async (req, res) => {
         '<span class="link-text">' + escapeHtml(link.title || link.url || 'Link') + '</span></a>';
     }).filter(Boolean).join('');
 
-    // Theme backgrounds
-    const themeBackgrounds = {
-      nature: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=800&q=80',
-      ocean: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80',
-      desert: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=800&q=80',
-      city: 'https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=800&q=80',
-      minimal: '',
-      dark: ''
+    // Lava Lamp Theme Colors
+    const lavaThemes = {
+      'lava-red': { bg: '#1a0a0a', blob1: '#ff4444', blob2: '#ff8800', blob3: '#ffaa00', textColor: '#fff', btnBg: 'rgba(255,68,68,0.3)', btnText: '#fff' },
+      'lava-blue': { bg: '#0a0a1a', blob1: '#4444ff', blob2: '#8844ff', blob3: '#44aaff', textColor: '#fff', btnBg: 'rgba(68,68,255,0.3)', btnText: '#fff' },
+      'lava-green': { bg: '#0a1a0a', blob1: '#44ff44', blob2: '#00ff88', blob3: '#88ffaa', textColor: '#fff', btnBg: 'rgba(68,255,68,0.3)', btnText: '#fff' },
+      'lava-pink': { bg: '#1a0a1a', blob1: '#ff44aa', blob2: '#ff88cc', blob3: '#aa44ff', textColor: '#fff', btnBg: 'rgba(255,68,170,0.3)', btnText: '#fff' },
+      'lava-gold': { bg: '#1a1400', blob1: '#ffcc00', blob2: '#ffaa00', blob3: '#ff8800', textColor: '#fff', btnBg: 'rgba(255,204,0,0.3)', btnText: '#fff' },
+      'lava-purple': { bg: '#0f0a1a', blob1: '#8844ff', blob2: '#aa44ff', blob3: '#6622cc', textColor: '#fff', btnBg: 'rgba(136,68,255,0.3)', btnText: '#fff' }
     };
 
-    // Theme styles
-    const themeStyles = {
-      nature: { btnBg: 'rgba(255,255,255,0.85)', btnText: '#2d3436', textColor: '#fff', overlay: 'rgba(0,0,0,0.3)' },
-      ocean: { btnBg: 'rgba(255,255,255,0.9)', btnText: '#2d3436', textColor: '#fff', overlay: 'rgba(0,0,0,0.25)' },
-      desert: { btnBg: 'rgba(232,178,152,0.9)', btnText: '#2d3436', textColor: '#fff', overlay: 'rgba(0,0,0,0.25)' },
-      city: { btnBg: 'rgba(255,255,255,0.85)', btnText: '#2d3436', textColor: '#fff', overlay: 'rgba(0,0,0,0.4)' },
-      minimal: { btnBg: 'rgba(0,0,0,0.05)', btnText: '#1a1a2e', textColor: '#1a1a2e', overlay: '' },
-      dark: { btnBg: 'rgba(255,255,255,0.1)', btnText: '#fff', textColor: '#fff', overlay: '' }
-    };
-
-    const currentTheme = page.theme || 'dark';
-    const bgImage = page.background_url || themeBackgrounds[currentTheme] || '';
-    const style = themeStyles[currentTheme] || themeStyles.dark;
-    const hasImage = bgImage && bgImage.length > 0;
+    const currentTheme = page.theme || 'lava-purple';
+    const lava = lavaThemes[currentTheme] || lavaThemes['lava-purple'];
+    const customBg = page.background_url;
 
     // Social icons
     const socialIcons = {
@@ -2026,21 +2015,59 @@ app.get('/@:username', async (req, res) => {
     body{
       font-family:'Inter',system-ui,sans-serif;
       min-height:100vh;
-      ${hasImage ? `
-        background:url('${bgImage}') center/cover no-repeat fixed;
-      ` : currentTheme === 'minimal' ? `
-        background:#f5f5f5;
-      ` : `
-        background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);
-      `}
+      background:${customBg ? "url('" + customBg + "') center/cover no-repeat fixed" : lava.bg};
     }
-    ${hasImage ? `
-    .overlay{
+    .lava-bg{
       position:fixed;top:0;left:0;right:0;bottom:0;
-      background:${style.overlay};
-      z-index:0;
+      overflow:hidden;z-index:0;
+      filter:blur(80px);
     }
-    ` : ''}
+    .blob{
+      position:absolute;
+      border-radius:50%;
+      animation:float 20s ease-in-out infinite;
+    }
+    .blob-1{
+      width:300px;height:300px;
+      background:${lava.blob1};
+      left:10%;top:20%;
+      animation-delay:0s;
+      opacity:0.7;
+    }
+    .blob-2{
+      width:250px;height:250px;
+      background:${lava.blob2};
+      right:10%;top:50%;
+      animation-delay:-5s;
+      opacity:0.6;
+    }
+    .blob-3{
+      width:200px;height:200px;
+      background:${lava.blob3};
+      left:30%;bottom:10%;
+      animation-delay:-10s;
+      opacity:0.7;
+    }
+    .blob-4{
+      width:180px;height:180px;
+      background:${lava.blob1};
+      right:20%;bottom:30%;
+      animation-delay:-15s;
+      opacity:0.5;
+    }
+    .blob-5{
+      width:150px;height:150px;
+      background:${lava.blob2};
+      left:5%;top:60%;
+      animation-delay:-8s;
+      opacity:0.6;
+    }
+    @keyframes float{
+      0%,100%{transform:translate(0,0) scale(1)}
+      25%{transform:translate(50px,-80px) scale(1.1)}
+      50%{transform:translate(-30px,-120px) scale(0.9)}
+      75%{transform:translate(80px,-40px) scale(1.05)}
+    }
     .container{
       position:relative;z-index:1;
       max-width:420px;
@@ -2057,29 +2084,29 @@ app.get('/@:username', async (req, res) => {
       margin:0 auto 16px;
       overflow:hidden;
       border:3px solid rgba(255,255,255,0.3);
-      box-shadow:0 8px 32px rgba(0,0,0,0.2);
+      box-shadow:0 8px 32px rgba(0,0,0,0.3);
     }
     .avatar img{width:100%;height:100%;object-fit:cover}
     .avatar-letter{
       width:100%;height:100%;
       display:flex;align-items:center;justify-content:center;
-      background:linear-gradient(135deg,#667eea,#764ba2);
+      background:linear-gradient(135deg,${lava.blob1},${lava.blob2});
       color:#fff;font-size:2.5rem;font-weight:700;
     }
     .name{
       font-size:1.5rem;font-weight:700;
-      color:${style.textColor};
+      color:${lava.textColor};
       margin-bottom:8px;
-      text-shadow:${hasImage ? '0 2px 4px rgba(0,0,0,0.3)' : 'none'};
+      text-shadow:0 2px 8px rgba(0,0,0,0.5);
     }
     .bio{
       font-size:0.95rem;
-      color:${style.textColor};
+      color:${lava.textColor};
       opacity:0.85;
       line-height:1.5;
       max-width:300px;
       margin:0 auto;
-      text-shadow:${hasImage ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'};
+      text-shadow:0 1px 4px rgba(0,0,0,0.4);
     }
     .social-row{
       display:flex;justify-content:center;gap:12px;
@@ -2088,31 +2115,37 @@ app.get('/@:username', async (req, res) => {
     .social-icon{
       width:40px;height:40px;
       display:flex;align-items:center;justify-content:center;
-      background:${hasImage ? 'rgba(255,255,255,0.15)' : style.btnBg};
+      background:rgba(255,255,255,0.1);
       backdrop-filter:blur(10px);
       -webkit-backdrop-filter:blur(10px);
       border-radius:50%;
-      color:${style.textColor};
+      color:${lava.textColor};
       transition:transform 0.2s,background 0.2s;
+      border:1px solid rgba(255,255,255,0.1);
     }
-    .social-icon:hover{transform:scale(1.1);background:${hasImage ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)'}}
+    .social-icon:hover{transform:scale(1.1);background:rgba(255,255,255,0.2)}
     .social-icon svg{width:20px;height:20px;fill:currentColor}
     .links{display:flex;flex-direction:column;gap:12px;flex:1}
     .link-btn{
       display:flex;align-items:center;gap:12px;
       padding:16px 20px;
-      background:${style.btnBg};
+      background:${lava.btnBg};
       backdrop-filter:blur(20px);
       -webkit-backdrop-filter:blur(20px);
-      border-radius:12px;
-      color:${style.btnText};
+      border:1px solid rgba(255,255,255,0.15);
+      border-radius:16px;
+      color:${lava.btnText};
       text-decoration:none;
       font-weight:500;
       font-size:0.95rem;
-      transition:transform 0.2s,box-shadow 0.2s;
-      box-shadow:0 2px 8px rgba(0,0,0,0.1);
+      transition:all 0.3s ease;
+      box-shadow:0 4px 15px rgba(0,0,0,0.2);
     }
-    .link-btn:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.15)}
+    .link-btn:hover{
+      transform:translateY(-3px);
+      box-shadow:0 8px 25px rgba(0,0,0,0.3);
+      background:${lava.btnBg.replace('0.3','0.5')};
+    }
     .link-btn:active{transform:translateY(0)}
     .link-icon{font-size:1.2rem;flex-shrink:0}
     .link-text{flex:1;text-align:center}
@@ -2121,24 +2154,31 @@ app.get('/@:username', async (req, res) => {
     }
     .footer a{
       font-size:0.8rem;
-      color:${style.textColor};
-      opacity:0.6;
+      color:${lava.textColor};
+      opacity:0.5;
       text-decoration:none;
     }
     .footer a:hover{opacity:1}
     .empty{
       text-align:center;padding:40px 20px;
-      color:${style.textColor};opacity:0.7;
+      color:${lava.textColor};opacity:0.7;
     }
     @media(max-width:480px){
       .container{padding:40px 16px 32px}
       .avatar{width:80px;height:80px}
       .name{font-size:1.3rem}
+      .blob{transform:scale(0.7)}
     }
   </style>
 </head>
 <body>
-  ${hasImage ? '<div class="overlay"></div>' : ''}
+  <div class="lava-bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="blob blob-4"></div>
+    <div class="blob blob-5"></div>
+  </div>
   <div class="container">
     <div class="profile">
       <div class="avatar">
