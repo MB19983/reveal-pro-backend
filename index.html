@@ -2055,6 +2055,10 @@
                                 '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">URL</label>' +
                                 '<input type="url" class="form-input" style="width:100%;padding:12px;border-radius:10px;" placeholder="https://example.com" value="' + escapeHTML(link.url || '') + '" data-link-index="' + i + '" data-field="url">' +
                             '</div>' +
+                            '<div style="margin-bottom:12px;">' +
+                                '<label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Clicks before alert</label>' +
+                                '<input type="number" class="form-input" style="width:100px;padding:12px;border-radius:10px;text-align:center;" min="1" max="100" value="' + (link.alert_threshold || 5) + '" data-link-index="' + i + '" data-field="alert_threshold">' +
+                            '</div>' +
                         '</div>'
                     ) : (
                         // WhatsApp Fields
@@ -2392,6 +2396,7 @@
                 var messageInput = item.querySelector('[data-field="message"]');
                 var startDateInput = item.querySelector('[data-field="startDate"]');
                 var endDateInput = item.querySelector('[data-field="endDate"]');
+                var alertThresholdInput = item.querySelector('[data-field="alert_threshold"]');
 
                 var link = {
                     title: titleInput ? titleInput.value : '',
@@ -2405,6 +2410,7 @@
                     link.message = messageInput ? messageInput.value : '';
                 } else {
                     link.url = urlInput ? urlInput.value : '';
+                    link.alert_threshold = alertThresholdInput ? parseInt(alertThresholdInput.value) || 5 : 5;
                 }
 
                 if (startDateInput && startDateInput.value) {
