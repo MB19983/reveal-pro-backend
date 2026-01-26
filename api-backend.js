@@ -2219,11 +2219,13 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
     setImmediate(async () => {
       try {
         // Get click count for this specific link
-        const { count } = await supabase
+        const { count, error: countError } = await supabase
           .from('link_clicks')
-          .select('id', { count: 'exact' })
+          .select('id', { count: 'exact', head: true })
           .eq('page_id', pageId)
           .eq('link_index', idx);
+
+        console.log('Link click count:', count, 'Error:', countError?.message);
 
         // Get user settings
         const { data: user } = await supabase
@@ -2232,7 +2234,10 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
           .eq('id', page.user_id)
           .single();
 
-        if (!user) return;
+        if (!user) {
+          console.log('User not found for alerts');
+          return;
+        }
 
         // Use link-specific threshold, fallback to user setting, then default
         const threshold = link.alert_threshold || user.threshold_pages || 5;
@@ -2240,19 +2245,29 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
         const pageName = page.name || 'Smart Page';
         const alertName = pageName + ' - ' + linkName;
 
+        console.log('Alert check:', { count, threshold, shouldAlert: count && count > 0 && count % threshold === 0 });
+
         // Send alert if threshold reached
         if (count && count > 0 && count % threshold === 0) {
           const intentScore = Math.min(50 + count * 2, 100);
           const latestClick = { country: geoInfo.country, city: geoInfo.city, device_type: deviceInfo.deviceType };
 
+          console.log('Sending alerts for:', alertName, 'Email:', user.email, 'WhatsApp:', user.whatsapp_number);
+
           // Send email alert
           if (user.email && user.email_alerts_enabled !== false) {
-            await sendEmailAlert(alertName, intentScore, count, latestClick, user.email, 'smartpage');
+            console.log('Attempting email alert to:', user.email);
+            const emailSent = await sendEmailAlert(alertName, intentScore, count, latestClick, user.email, 'smartpage');
+            console.log('Email alert result:', emailSent);
           }
 
-          // Send WhatsApp alert
+          // Send WhatsApp alert (PRO only)
           if (user.whatsapp_number && user.whatsapp_alerts_enabled !== false && user.plan === 'pro') {
-            await sendWhatsAppAlert(alertName, intentScore, count, user.whatsapp_number, 'smartpage');
+            console.log('Attempting WhatsApp alert to:', user.whatsapp_number);
+            const whatsappSent = await sendWhatsAppAlert(alertName, intentScore, count, user.whatsapp_number, 'smartpage');
+            console.log('WhatsApp alert result:', whatsappSent);
+          } else {
+            console.log('WhatsApp skipped:', { hasNumber: !!user.whatsapp_number, enabled: user.whatsapp_alerts_enabled, plan: user.plan });
           }
         }
       } catch (e) {
