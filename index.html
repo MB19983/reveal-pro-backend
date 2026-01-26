@@ -2177,28 +2177,28 @@
 
                 // Theme Selector
                 '<div class="form-group" style="margin-bottom:24px;">' +
-                    '<label style="display:block;margin-bottom:10px;font-weight:600;">Theme</label>' +
+                    '<label style="display:block;margin-bottom:10px;font-weight:600;">Theme Lava Lamp</label>' +
                     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">' +
-                        '<button type="button" class="theme-btn" data-theme="nature" onclick="selectTheme(\'nature\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'nature') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Nature</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-red" onclick="selectTheme(\'lava-red\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-red') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a0a0a,#ff4444,#ff8800);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Rouge</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="ocean" onclick="selectTheme(\'ocean\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'ocean') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Ocean</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-blue" onclick="selectTheme(\'lava-blue\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-blue') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#0a0a1a,#4444ff,#44aaff);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Bleu</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="desert" onclick="selectTheme(\'desert\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'desert') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Desert</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-green" onclick="selectTheme(\'lava-green\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-green') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#0a1a0a,#44ff44,#00ff88);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Vert</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="city" onclick="selectTheme(\'city\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'city') ? 'var(--purple)' : 'var(--border)') + ';background:url(https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=200&q=60) center/cover;cursor:pointer;height:60px;position:relative;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">City</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-pink" onclick="selectTheme(\'lava-pink\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-pink') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a0a1a,#ff44aa,#aa44ff);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Rose</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="minimal" onclick="selectTheme(\'minimal\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'minimal') ? 'var(--purple)' : 'var(--border)') + ';background:#f5f5f5;cursor:pointer;height:60px;position:relative;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#333;">Minimal</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-gold" onclick="selectTheme(\'lava-gold\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((page.theme === 'lava-gold') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a1400,#ffcc00,#ff8800);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Or</span>' +
                         '</button>' +
-                        '<button type="button" class="theme-btn" data-theme="dark" onclick="selectTheme(\'dark\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((!page.theme || page.theme === 'dark') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#1a1a2e,#16213e);cursor:pointer;height:60px;position:relative;">' +
-                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;">Dark</span>' +
+                        '<button type="button" class="theme-btn" data-theme="lava-purple" onclick="selectTheme(\'lava-purple\')" style="padding:8px;border-radius:10px;border:2px solid ' + ((!page.theme || page.theme === 'lava-purple') ? 'var(--purple)' : 'var(--border)') + ';background:linear-gradient(135deg,#0f0a1a,#8844ff,#aa44ff);cursor:pointer;height:60px;position:relative;overflow:hidden;">' +
+                            '<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:0.7rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);">Violet</span>' +
                         '</button>' +
                     '</div>' +
-                    '<input type="hidden" id="editPageTheme" value="' + (page.theme || 'dark') + '">' +
+                    '<input type="hidden" id="editPageTheme" value="' + (page.theme || 'lava-purple') + '">' +
                 '</div>' +
                 // Custom Background
                 '<div class="form-group" style="margin-bottom:24px;">' +
