@@ -2017,78 +2017,9 @@ app.get('/@:username', async (req, res) => {
       min-height:100vh;
       background:${customBg ? "url('" + customBg + "') center/cover no-repeat fixed" : lava.bg};
     }
-    .lava-bg{
-      position:fixed;top:0;left:0;right:0;bottom:0;
-      overflow:hidden;z-index:0;
-    }
-    .blob{
-      position:absolute;
-      border-radius:45% 55% 60% 40% / 50% 45% 55% 50%;
-      background:radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 15%, transparent 40%),
-                 radial-gradient(ellipse at 70% 80%, rgba(0,0,0,0.2) 0%, transparent 50%),
-                 linear-gradient(180deg, var(--blob-light) 0%, var(--blob-color) 50%, var(--blob-dark) 100%);
-      box-shadow: 0 0 40px var(--blob-glow), inset 0 -20px 40px var(--blob-dark), inset 0 20px 40px var(--blob-light);
-      animation:rise 15s ease-in-out infinite;
-    }
-    .blob-1{
-      --blob-color:${lava.blob1};
-      --blob-light:${lava.blob1}cc;
-      --blob-dark:${lava.blob1}66;
-      --blob-glow:${lava.blob1}88;
-      width:120px;height:140px;
-      left:15%;bottom:-150px;
-      animation-duration:18s;
-    }
-    .blob-2{
-      --blob-color:${lava.blob2};
-      --blob-light:${lava.blob2}cc;
-      --blob-dark:${lava.blob2}66;
-      --blob-glow:${lava.blob2}88;
-      width:80px;height:100px;
-      left:60%;bottom:-120px;
-      animation-delay:-4s;
-      animation-duration:14s;
-      border-radius:50% 50% 45% 55% / 55% 50% 50% 45%;
-    }
-    .blob-3{
-      --blob-color:${lava.blob3};
-      --blob-light:${lava.blob3}cc;
-      --blob-dark:${lava.blob3}66;
-      --blob-glow:${lava.blob3}88;
-      width:100px;height:120px;
-      left:35%;bottom:-130px;
-      animation-delay:-8s;
-      animation-duration:16s;
-      border-radius:55% 45% 50% 50% / 45% 55% 45% 55%;
-    }
-    .blob-4{
-      --blob-color:${lava.blob1};
-      --blob-light:${lava.blob1}cc;
-      --blob-dark:${lava.blob1}66;
-      --blob-glow:${lava.blob1}88;
-      width:60px;height:80px;
-      right:15%;bottom:-100px;
-      animation-delay:-12s;
-      animation-duration:20s;
-      border-radius:48% 52% 55% 45% / 52% 48% 52% 48%;
-    }
-    .blob-5{
-      --blob-color:${lava.blob2};
-      --blob-light:${lava.blob2}cc;
-      --blob-dark:${lava.blob2}66;
-      --blob-glow:${lava.blob2}88;
-      width:90px;height:110px;
-      left:5%;bottom:-120px;
-      animation-delay:-6s;
-      animation-duration:17s;
-      border-radius:52% 48% 45% 55% / 48% 52% 48% 52%;
-    }
-    @keyframes rise{
-      0%{transform:translateY(0) scale(1) rotate(0deg);opacity:0}
-      5%{opacity:1}
-      50%{transform:translateY(-100vh) scale(1.1) rotate(5deg);opacity:1}
-      95%{opacity:1}
-      100%{transform:translateY(-200vh) scale(0.9) rotate(-5deg);opacity:0}
+    #lavaCanvas{
+      position:fixed;top:0;left:0;width:100%;height:100%;
+      z-index:0;pointer-events:none;
     }
     .container{
       position:relative;z-index:1;
@@ -2189,18 +2120,11 @@ app.get('/@:username', async (req, res) => {
       .container{padding:40px 16px 32px}
       .avatar{width:80px;height:80px}
       .name{font-size:1.3rem}
-      .blob{transform:scale(0.7)}
     }
   </style>
 </head>
 <body>
-  <div class="lava-bg">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
-    <div class="blob blob-4"></div>
-    <div class="blob blob-5"></div>
-  </div>
+  <canvas id="lavaCanvas"></canvas>
   <div class="container">
     <div class="profile">
       <div class="avatar">
@@ -2219,6 +2143,228 @@ app.get('/@:username', async (req, res) => {
       <a href="https://noly.pro" target="_blank">Made with Noly</a>
     </div>
   </div>
+  <script>
+  (function(){
+    const canvas = document.getElementById('lavaCanvas');
+    const ctx = canvas.getContext('2d');
+    const colors = ['${lava.blob1}', '${lava.blob2}', '${lava.blob3}'];
+
+    let W, H;
+    function resize() {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Blob class with physics
+    class Blob {
+      constructor() {
+        this.reset();
+        this.y = Math.random() * H; // Start at random height
+      }
+      reset() {
+        this.baseRadius = 30 + Math.random() * 50;
+        this.radius = this.baseRadius;
+        this.x = 50 + Math.random() * (W - 100);
+        this.y = H + this.radius;
+        this.vy = 0;
+        this.vx = 0;
+        this.temperature = 1; // 1 = hot (bottom), 0 = cold (top)
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+        this.wobbleOffset = Math.random() * Math.PI * 2;
+        this.wobbleSpeed = 0.5 + Math.random() * 0.5;
+        this.deform = 1;
+      }
+      update(dt) {
+        // Temperature based on vertical position (bottom = hot, top = cold)
+        const targetTemp = 1 - (this.y / H);
+        this.temperature += (targetTemp - this.temperature) * 0.01;
+
+        // Buoyancy: hot rises, cold sinks
+        const buoyancy = (this.temperature - 0.5) * 0.15;
+        this.vy -= buoyancy;
+
+        // Friction/resistance
+        this.vy *= 0.98;
+        this.vx *= 0.95;
+
+        // Slight horizontal wobble
+        const wobble = Math.sin(Date.now() * 0.001 * this.wobbleSpeed + this.wobbleOffset);
+        this.vx += wobble * 0.02;
+
+        // Update position
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Bounce off walls
+        if (this.x < this.radius) { this.x = this.radius; this.vx *= -0.5; }
+        if (this.x > W - this.radius) { this.x = W - this.radius; this.vx *= -0.5; }
+
+        // Deformation based on velocity
+        const speed = Math.abs(this.vy);
+        this.deform = 1 + speed * 0.3;
+
+        // Radius pulsing
+        this.radius = this.baseRadius + Math.sin(Date.now() * 0.002 + this.wobbleOffset) * 5;
+
+        // Reset if off screen
+        if (this.y < -this.radius * 2) {
+          this.y = H + this.radius;
+          this.vy = 0;
+          this.temperature = 1;
+        }
+        if (this.y > H + this.radius * 2) {
+          this.y = -this.radius;
+          this.vy = 0;
+          this.temperature = 0;
+        }
+      }
+    }
+
+    // Create blobs
+    const blobs = [];
+    const numBlobs = 8;
+    for (let i = 0; i < numBlobs; i++) {
+      blobs.push(new Blob());
+    }
+
+    // Metaball rendering using marching squares threshold
+    function drawMetaballs() {
+      const imageData = ctx.createImageData(W, H);
+      const data = imageData.data;
+
+      // Sample at lower resolution for performance
+      const scale = 3;
+      const sw = Math.ceil(W / scale);
+      const sh = Math.ceil(H / scale);
+
+      for (let py = 0; py < sh; py++) {
+        for (let px = 0; px < sw; px++) {
+          const x = px * scale;
+          const y = py * scale;
+
+          let sum = 0;
+          let r = 0, g = 0, b = 0;
+          let totalWeight = 0;
+
+          for (const blob of blobs) {
+            const dx = x - blob.x;
+            const dy = (y - blob.y) / blob.deform;
+            const d2 = dx * dx + dy * dy;
+            const radius2 = blob.radius * blob.radius;
+
+            if (d2 < radius2 * 16) {
+              const influence = radius2 / (d2 + 1);
+              sum += influence;
+
+              // Parse color
+              const col = blob.color;
+              const cr = parseInt(col.slice(1,3), 16);
+              const cg = parseInt(col.slice(3,5), 16);
+              const cb = parseInt(col.slice(5,7), 16);
+
+              r += cr * influence;
+              g += cg * influence;
+              b += cb * influence;
+              totalWeight += influence;
+            }
+          }
+
+          if (sum > 1 && totalWeight > 0) {
+            r = Math.min(255, r / totalWeight);
+            g = Math.min(255, g / totalWeight);
+            b = Math.min(255, b / totalWeight);
+
+            // Glossy highlight effect
+            const highlight = Math.max(0, sum - 1) * 30;
+            r = Math.min(255, r + highlight);
+            g = Math.min(255, g + highlight);
+            b = Math.min(255, b + highlight);
+
+            const alpha = Math.min(255, (sum - 1) * 200 + 55);
+
+            // Fill scaled pixels
+            for (let dy = 0; dy < scale && py * scale + dy < H; dy++) {
+              for (let dx = 0; dx < scale && px * scale + dx < W; dx++) {
+                const idx = ((py * scale + dy) * W + (px * scale + dx)) * 4;
+                data[idx] = r;
+                data[idx + 1] = g;
+                data[idx + 2] = b;
+                data[idx + 3] = alpha;
+              }
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Alternative: Draw glossy circles (faster, still looks good)
+    function drawGlossyBlobs() {
+      ctx.clearRect(0, 0, W, H);
+
+      // Sort by Y for depth
+      const sorted = [...blobs].sort((a, b) => b.y - a.y);
+
+      for (const blob of sorted) {
+        const r = blob.radius;
+        const x = blob.x;
+        const y = blob.y;
+        const deform = blob.deform;
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(1, deform);
+
+        // Glow
+        const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 1.5);
+        glow.addColorStop(0, blob.color + '60');
+        glow.addColorStop(1, blob.color + '00');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Main blob
+        const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.1, blob.color);
+        grad.addColorStop(0.7, blob.color);
+        grad.addColorStop(1, blob.color + '88');
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glossy highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.25, -r * 0.35, r * 0.4, r * 0.25, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    let lastTime = 0;
+    function animate(time) {
+      const dt = Math.min(50, time - lastTime);
+      lastTime = time;
+
+      for (const blob of blobs) {
+        blob.update(dt);
+      }
+
+      drawGlossyBlobs();
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  })();
+  </script>
 </body>
 </html>`;
     res.send(html);
