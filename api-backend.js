@@ -2157,236 +2157,106 @@ app.get('/@:username', async (req, res) => {
     resize();
     window.addEventListener('resize', resize);
 
-    // Parse hex color to RGB
-    function hexToRgb(hex) {
-      const r = parseInt(hex.slice(1,3), 16);
-      const g = parseInt(hex.slice(3,5), 16);
-      const b = parseInt(hex.slice(5,7), 16);
-      return {r, g, b};
-    }
-
-    const colorRgb = colors.map(hexToRgb);
-
-    // Blob class with varied shapes
+    // Simple round blob class
     class Blob {
-      constructor(index) {
-        this.index = index;
-        this.color = colorRgb[index % colorRgb.length];
+      constructor() {
         this.reset(true);
       }
       reset(initial) {
-        // Varied sizes - some small, some large
-        this.baseRadius = 25 + Math.random() * 60;
-        this.radius = this.baseRadius;
+        // Varied sizes - from small to large
+        this.radius = 20 + Math.random() * 70;
+        this.x = this.radius + Math.random() * (W - this.radius * 2);
+        this.color = colors[Math.floor(Math.random() * colors.length)];
 
-        // Shape type: 0=round, 1=tall, 2=wide, 3=irregular
-        this.shapeType = Math.floor(Math.random() * 4);
+        // Speed varies with size (smaller = faster)
+        this.speed = 0.3 + Math.random() * 0.8;
 
-        // Aspect ratios for different shapes
-        if (this.shapeType === 1) { // Tall/elongated
-          this.scaleX = 0.6 + Math.random() * 0.3;
-          this.scaleY = 1.3 + Math.random() * 0.7;
-        } else if (this.shapeType === 2) { // Wide
-          this.scaleX = 1.2 + Math.random() * 0.5;
-          this.scaleY = 0.6 + Math.random() * 0.3;
-        } else if (this.shapeType === 3) { // Irregular
-          this.scaleX = 0.8 + Math.random() * 0.4;
-          this.scaleY = 0.8 + Math.random() * 0.4;
-        } else { // Round
-          this.scaleX = 1;
-          this.scaleY = 1;
-        }
+        // Slight horizontal wobble
+        this.wobbleAmp = 20 + Math.random() * 30;
+        this.wobbleSpeed = 0.5 + Math.random() * 1;
+        this.wobbleOffset = Math.random() * Math.PI * 2;
 
-        // Position - spread across entire width
-        this.x = this.baseRadius + Math.random() * (W - this.baseRadius * 2);
-
-        // Start position
         if (initial) {
-          this.y = Math.random() * H;
-          this.temperature = 1 - (this.y / H);
+          // Start at random Y positions
+          this.y = Math.random() * (H + this.radius * 2);
         } else {
-          // Reset at bottom when recycling
-          this.y = H + this.baseRadius * 2;
-          this.temperature = 1;
+          // Respawn at bottom
+          this.y = H + this.radius + Math.random() * 100;
         }
-
-        this.vy = 0;
-        this.vx = 0;
-        this.wobblePhase = Math.random() * Math.PI * 2;
-        this.wobbleSpeed = 0.3 + Math.random() * 0.4;
-        this.wobbleAmp = 0.3 + Math.random() * 0.5;
-
-        // For organic shape deformation
-        this.noiseOffset = Math.random() * 1000;
-        this.pulsePhase = Math.random() * Math.PI * 2;
       }
-
       update() {
-        const t = Date.now() * 0.001;
+        // Move up
+        this.y -= this.speed;
 
-        // Temperature based on Y position
-        const targetTemp = Math.max(0, Math.min(1, 1 - (this.y / H)));
-        this.temperature += (targetTemp - this.temperature) * 0.02;
+        // Horizontal wobble
+        const wobble = Math.sin(Date.now() * 0.001 * this.wobbleSpeed + this.wobbleOffset);
+        this.x += wobble * 0.3;
 
-        // Buoyancy force - hot rises, cold sinks
-        const buoyancy = (this.temperature - 0.5) * 0.08;
-        this.vy -= buoyancy;
+        // Keep in bounds horizontally
+        if (this.x < this.radius) this.x = this.radius;
+        if (this.x > W - this.radius) this.x = W - this.radius;
 
-        // Drag/friction
-        this.vy *= 0.985;
-        this.vx *= 0.95;
-
-        // Horizontal wobble - more pronounced
-        const wobble = Math.sin(t * this.wobbleSpeed + this.wobblePhase);
-        this.vx += wobble * this.wobbleAmp * 0.05;
-
-        // Random drift
-        this.vx += (Math.random() - 0.5) * 0.02;
-
-        // Update position
-        this.x += this.vx;
-        this.y += this.vy;
-
-        // Soft bounce off walls
-        const margin = this.baseRadius;
-        if (this.x < margin) {
-          this.x = margin;
-          this.vx = Math.abs(this.vx) * 0.3;
-        }
-        if (this.x > W - margin) {
-          this.x = W - margin;
-          this.vx = -Math.abs(this.vx) * 0.3;
-        }
-
-        // Pulsing radius
-        this.radius = this.baseRadius * (1 + Math.sin(t * 0.8 + this.pulsePhase) * 0.1);
-
-        // Dynamic scale based on velocity (stretch in direction of movement)
-        const speedY = Math.abs(this.vy);
-        const stretchY = 1 + speedY * 0.5;
-        const stretchX = 1 / Math.sqrt(stretchY);
-
-        this.currentScaleX = this.scaleX * stretchX;
-        this.currentScaleY = this.scaleY * stretchY;
-
-        // Recycle if off screen
-        if (this.y < -this.baseRadius * 3) {
-          this.y = H + this.baseRadius * 2;
-          this.vy = 0;
-          this.temperature = 1;
-          this.x = this.baseRadius + Math.random() * (W - this.baseRadius * 2);
-        }
-        if (this.y > H + this.baseRadius * 3) {
-          this.y = -this.baseRadius * 2;
-          this.vy = 0;
-          this.temperature = 0;
+        // Reset when off top
+        if (this.y < -this.radius * 2) {
+          this.reset(false);
         }
       }
+      draw() {
+        const r = this.radius;
+        const x = this.x;
+        const y = this.y;
 
-      // Get influence at point (for metaball effect)
-      getInfluence(px, py) {
-        const dx = (px - this.x) / this.currentScaleX;
-        const dy = (py - this.y) / this.currentScaleY;
-        const d2 = dx * dx + dy * dy;
-        const r2 = this.radius * this.radius;
+        ctx.save();
 
-        if (d2 > r2 * 9) return 0;
-        return r2 / (d2 + 0.1);
+        // Glow effect
+        const glow = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 1.8);
+        glow.addColorStop(0, this.color + '50');
+        glow.addColorStop(1, this.color + '00');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Main blob with gradient
+        const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.15, this.color);
+        grad.addColorStop(0.8, this.color);
+        grad.addColorStop(1, this.color + '88');
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glossy highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(x - r * 0.25, y - r * 0.3, r * 0.35, r * 0.2, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
       }
     }
 
-    // Create varied blobs
+    // Create blobs
     const blobs = [];
-    const numBlobs = 12;
+    const numBlobs = 10;
     for (let i = 0; i < numBlobs; i++) {
-      blobs.push(new Blob(i));
-    }
-
-    // Offscreen canvas for metaball rendering
-    const scale = 4; // Lower res for performance
-    let offCanvas, offCtx, offW, offH;
-
-    function createOffscreen() {
-      offW = Math.ceil(W / scale);
-      offH = Math.ceil(H / scale);
-      offCanvas = document.createElement('canvas');
-      offCanvas.width = offW;
-      offCanvas.height = offH;
-      offCtx = offCanvas.getContext('2d');
-    }
-    createOffscreen();
-    window.addEventListener('resize', createOffscreen);
-
-    // Render metaballs with fusion effect
-    function render() {
-      const imageData = offCtx.createImageData(offW, offH);
-      const data = imageData.data;
-
-      for (let py = 0; py < offH; py++) {
-        for (let px = 0; px < offW; px++) {
-          const worldX = px * scale;
-          const worldY = py * scale;
-
-          let totalInfluence = 0;
-          let r = 0, g = 0, b = 0;
-
-          for (const blob of blobs) {
-            const influence = blob.getInfluence(worldX, worldY);
-            if (influence > 0.01) {
-              totalInfluence += influence;
-              r += blob.color.r * influence;
-              g += blob.color.g * influence;
-              b += blob.color.b * influence;
-            }
-          }
-
-          // Threshold for metaball surface
-          const threshold = 1.0;
-          if (totalInfluence > threshold) {
-            // Normalize color
-            r = Math.min(255, r / totalInfluence);
-            g = Math.min(255, g / totalInfluence);
-            b = Math.min(255, b / totalInfluence);
-
-            // Add glossy highlight based on intensity
-            const intensity = Math.min(1, (totalInfluence - threshold) * 0.5);
-            const highlight = intensity * 60;
-            r = Math.min(255, r + highlight);
-            g = Math.min(255, g + highlight);
-            b = Math.min(255, b + highlight);
-
-            const idx = (py * offW + px) * 4;
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-          }
-        }
-      }
-
-      offCtx.putImageData(imageData, 0, 0);
-
-      // Draw to main canvas with smoothing
-      ctx.clearRect(0, 0, W, H);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(offCanvas, 0, 0, W, H);
-
-      // Add glow effect
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.filter = 'blur(20px)';
-      ctx.globalAlpha = 0.3;
-      ctx.drawImage(offCanvas, 0, 0, W, H);
-      ctx.filter = 'none';
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
+      blobs.push(new Blob());
     }
 
     function animate() {
+      ctx.clearRect(0, 0, W, H);
+
+      // Sort by size for depth (smaller in front)
+      blobs.sort((a, b) => b.radius - a.radius);
+
       for (const blob of blobs) {
         blob.update();
+        blob.draw();
       }
-      render();
+
       requestAnimationFrame(animate);
     }
 
