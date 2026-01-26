@@ -2238,7 +2238,7 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
         // Get user settings
         const { data: user, error: userError } = await supabase
           .from('users')
-          .select('email, whatsapp_number, email_alerts_enabled, whatsapp_alerts_enabled, threshold_pages, plan')
+          .select('email, whatsapp_number, notify_email, notify_whatsapp, threshold_pages, plan')
           .eq('id', page.user_id)
           .single();
 
@@ -2268,7 +2268,7 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
           console.log('SENDING ALERTS for:', alertName, '| Email:', user.email, '| WhatsApp:', user.whatsapp_number);
 
           // Send email alert
-          if (user.email && user.email_alerts_enabled !== false) {
+          if (user.email && user.notify_email !== false) {
             try {
               const emailSent = await sendEmailAlert(alertName, intentScore, clickCount, latestClick, user.email, 'smartpage');
               console.log('Email alert sent:', emailSent);
@@ -2278,7 +2278,7 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
           }
 
           // Send WhatsApp alert (PRO only)
-          if (user.whatsapp_number && user.whatsapp_alerts_enabled !== false && user.plan === 'pro') {
+          if (user.whatsapp_number && user.notify_whatsapp && user.plan === 'pro') {
             try {
               const whatsappSent = await sendWhatsAppAlert(alertName, intentScore, clickCount, user.whatsapp_number, 'smartpage');
               console.log('WhatsApp alert sent:', whatsappSent);
@@ -2286,7 +2286,7 @@ app.get('/p/:pageId/l/:linkIndex', async (req, res) => {
               console.error('WhatsApp alert failed:', waErr.message);
             }
           } else {
-            console.log('WhatsApp skipped - Number:', !!user.whatsapp_number, 'Enabled:', user.whatsapp_alerts_enabled, 'Plan:', user.plan);
+            console.log('WhatsApp skipped - Number:', !!user.whatsapp_number, 'Enabled:', user.notify_whatsapp, 'Plan:', user.plan);
           }
         } else {
           console.log('No alert - clickCount:', clickCount, 'not multiple of threshold:', threshold);
